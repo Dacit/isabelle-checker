@@ -1,0 +1,8 @@
+title = Isabelle Checker
+module = $ISABELLE_CHECKER_HOME/lib/isabelle-checker.jar
+requirements = \
+  env:ISABELLE_SCALA_JAR
+sources = \
+  src/check_build.scala
+services = \
+  isabelle.Check_Build_Tools
