@@ -10,15 +10,89 @@ import scala.collection.mutable
 
 
 object Check_Build {
+  object Markup_Check_Session_Finished extends isabelle.Markup.Function("check_session_finished")
+
+  final case class Result(thms: List[String] = Nil, finished: Boolean = false) {
+    def rc: Int = if (finished) 0 else 1
+  }
+
+  object Results {
+    def apply(build: Build.Results, sessions: List[(String, Result)]): Results =
+      new Results(build, sessions.toMap)
+  }
+
+  final class Results private(val build: Build.Results, val sessions: Map[String, Result]) {
+    def sessions_ok: Boolean = sessions.values.forall(_.finished)
+    def rc: Int = if (!build.ok) build.rc else if (sessions_ok) 0 else 1
+  }
+
+  def home_dir: Path = Path.explode("$ISABELLE_CHECKER_HOME")
+
+  def check_session(options: Options,
+    background: Sessions.Background,
+    theories: List[Document.Node.Name],
+    trusted: List[Document.Node.Name] = Nil,
+    cache: Rich_Text.Cache = Rich_Text.Cache.make(),
+    progress: Progress = new Progress
+  ): Result = {
+    val store = Store(options, cache = cache)
+
+    val args = {
+      import XML.Encode._
+      pair(string, pair(list(string), list(string)))(
+        (background.session_name, (theories.map(_.theory), trusted.map(_.theory))))
+    }
+
+    val env =
+      Isabelle_System.Settings.env(List("ISABELLE_CHECKER_ARGS" -> YXML.string_of_body(args)))
+
+    val session =
+      new Session {
+        def session_options: Options = options
+        val interactive = false
+        val resources = new Resources(background, background, Logger.none)
+      }
+
+    val result = Synchronized(Result())
+    session.all_messages += Session.Consumer[Prover.Message]("check_build_output") {
+      case msg: Prover.Output =>
+        val message = msg.message
+        if (msg.is_stdout) progress.echo(Symbol.encode(XML.content(message)))
+        if (msg.is_stderr) progress.echo_error_message(Symbol.encode(XML.content(message)))
+      case _ =>
+    }
+
+    def shutdown(finished: Boolean): Prover.Protocol_Output => Boolean = { _ =>
+      result.change { res =>
+        val res1 = res.copy(finished = finished)
+        session.protocol_command("Prover.stop", XML.Encode.int(res1.rc))
+        res1
+      }
+      true
+    }
+
+    session.init_protocol_handler(new Session.Protocol_Handler {
+      override val functions: Session.Protocol_Functions =
+        List(
+          Markup.Build_Session_Finished.name -> shutdown(false),
+          Markup_Check_Session_Finished.name -> shutdown(true))
+    })
+
+    val process =
+      Isabelle_Process.start(options, session, background, store.session_heaps(background),
+        cwd = home_dir, env = env)
+    Isabelle_Thread.interrupt_handle(process.terminate()) { process.await_shutdown() }
+
+    result.value
+  }
+
   def check_build(
     options: Options,
-    private_dir: Option[Path] = None,
     selection: Sessions.Selection = Sessions.Selection.empty,
     trusted_sessions: List[String] = Nil,
     browser_info: Browser_Info.Config = Browser_Info.Config.none,
     progress: Progress = new Progress,
     check_unknown_files: Boolean = false,
-    build_heap: Boolean = false,
     clean_build: Boolean = false,
     afp_root: Option[Path] = None,
     dirs: List[Path] = Nil,
@@ -26,17 +100,58 @@ object Check_Build {
     infos: List[Sessions.Info] = Nil,
     numa_shuffling: Boolean = false,
     max_jobs: Option[Int] = None,
-    list_files: Boolean = false,
     fresh_build: Boolean = false,
-    no_build: Boolean = false,
-    soft_build: Boolean = false,
     export_files: Boolean = false,
-    augment_options: String => Options.Update = _ => Nil,
     session_setup: (String, Session) => Unit = (_, _) => (),
     cache: Rich_Text.Cache = Rich_Text.Cache.make()
-  ): Build.Results = {
-    ???
+  ): Results = {
+    val sessions_structure =
+      Sessions.load_structure(options, dirs = dirs, select_dirs = select_dirs, infos = infos)
+
+    val is_trusted =
+      sessions_structure.build_selection(Sessions.Selection(sessions = trusted_sessions)).toSet
+
+    def augment_options(session: String): Options.Update =
+      if (is_trusted(session)) Nil else List(Options.Spec.make("record_proofs"))
+
+    val build_result =
+      Build.build(options, selection = selection, browser_info = browser_info, progress = progress,
+        check_unknown_files = check_unknown_files, build_heap = true, clean_build = clean_build,
+        afp_root = afp_root, dirs = dirs, select_dirs = select_dirs, infos = infos, numa_shuffling =
+        numa_shuffling, max_jobs = max_jobs, fresh_build = fresh_build, export_files = export_files,
+        augment_options = augment_options, session_setup = session_setup, cache = cache)
+
+    val session_results =
+      if (build_result.ok) {
+        val trusted =
+          (for {
+            session <-
+              sessions_structure.imports_selection(Sessions.Selection(sessions = trusted_sessions))
+            (_, thy) <- build_result.deps(session).known_theories
+          } yield thy.name).toSet
+
+        for {
+          session <- sessions_structure.build_selection(selection)
+          if !is_trusted(session)
+        } yield session -> {
+          val base = build_result.deps(session)
+
+          val theories =
+            for {
+              (_, thy) <- base.known_theories.toList
+              node_name = thy.name
+              if !trusted(node_name)
+            } yield node_name
+
+          check_session(options, build_result.deps.background(session), theories, trusted =
+            trusted.toList, cache = cache, progress = progress)
+        }
+      }
+      else Nil
+
+    Results(build_result, session_results)
   }
+
 
   /* Isabelle tool wrappers */
 
@@ -50,18 +165,14 @@ object Check_Build {
         var numa_shuffling = false
         var browser_info = Browser_Info.Config.none
         var requirements = false
-        var soft_build = false
         val exclude_session_groups = new mutable.ListBuffer[String]
         var all_sessions = false
-        var build_heap = false
         var clean_build = false
         val dirs = new mutable.ListBuffer[Path]
         var export_files = false
         var fresh_build = false
         val session_groups = new mutable.ListBuffer[String]
         var max_jobs: Option[Int] = None
-        var list_files = false
-        var no_build = false
         var options = Options.init(update = Options.Spec.ISABELLE_BUILD_OPTIONS)
         var trusted_sessions = new mutable.ListBuffer[String]
         var verbose = false
@@ -80,7 +191,6 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
     -S           soft build: only observe changes of sources, not heap images
     -X NAME      exclude sessions from group NAME and all descendants
     -a           select all sessions
-    -b           build heap images
     -c           clean build
     -d DIR       include session directory
     -e           export files from session specification into file-system
@@ -88,8 +198,6 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
     -g NAME      select session group NAME
     -j INT       maximum number of parallel jobs
                  (default: 1 for local build, 0 for build cluster)
-    -l           list session source files
-    -n           no build -- take existing session build databases
     -o OPTION    override Isabelle system OPTION (via NAME=VAL or NAME)
     -t NAME      trust session NAME and all requirements
     -v           verbose
@@ -105,18 +213,14 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
           "N" -> (_ => numa_shuffling = true),
           "P:" -> (arg => browser_info = Browser_Info.Config.make(arg)),
           "R" -> (_ => requirements = true),
-          "S" -> (_ => soft_build = true),
           "X:" -> (arg => exclude_session_groups += arg),
           "a" -> (_ => all_sessions = true),
-          "b" -> (_ => build_heap = true),
           "c" -> (_ => clean_build = true),
           "d:" -> (arg => dirs += Path.explode(arg)),
           "e" -> (_ => export_files = true),
           "f" -> (_ => fresh_build = true),
           "g:" -> (arg => session_groups += arg),
           "j:" -> (arg => max_jobs = Some(Value.Nat.parse(arg))),
-          "l" -> (_ => list_files = true),
-          "n" -> (_ => no_build = true),
           "o:" -> (arg => options = options + arg),
           "t:" -> (arg => trusted_sessions += arg),
           "v" -> (_ => verbose = true),
@@ -151,17 +255,13 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
             browser_info = browser_info,
             progress = progress,
             check_unknown_files = Mercurial.is_repository(Path.ISABELLE_HOME),
-            build_heap = build_heap,
             clean_build = clean_build,
             afp_root = afp_root,
             dirs = dirs.toList,
             select_dirs = select_dirs.toList,
             numa_shuffling = Host.numa_check(progress, numa_shuffling),
             max_jobs = max_jobs,
-            list_files = list_files,
             fresh_build = fresh_build,
-            no_build = no_build,
-            soft_build = soft_build,
             export_files = export_files)
 
         val stop_date = progress.now()
@@ -170,7 +270,7 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
         progress.echo("\nFinished at " + Build_Log.print_date(stop_date), verbose = true)
 
         val total_timing =
-          results.sessions.iterator.map(a => results(a).timing).foldLeft(Timing.zero)(_ + _).
+          results.sessions.keys.map(a => results.build(a).timing).foldLeft(Timing.zero)(_ + _).
             copy(elapsed = elapsed_time)
         progress.echo(total_timing.message_resources)
 
