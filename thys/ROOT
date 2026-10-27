@@ -1,0 +1,7 @@
+session Checker_Export = Metalogic_ProofChecker +
+  sessions
+    Containers
+  theories
+    Checker_Export
+  export_files (in "../src") [2]
+    "Checker_Export.*:code/**"
