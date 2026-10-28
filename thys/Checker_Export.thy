@@ -169,9 +169,9 @@ lemma all_sorts_code[code]:
 
 text \<open>Optimized Export\<close>
 
-export_code exe_check_proof exereplay exe_wf_theory exe_wf_sig exe_sig_conds exeis_std_sig sort
-  eq_typ eq_term eq_var norm vars of_class term_ok type_of int nat Bv PBound Tv Free ExeTheory
-  ExeSignature
+export_code exe_check_proof exereplay exe_wf_theory
+  Bv PBound Tv Free ExeTheory ExeSignature
+  int nat sort
   in SML module_name ExportCheck file_prefix set_export
 
 end

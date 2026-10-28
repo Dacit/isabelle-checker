@@ -32,7 +32,6 @@ structure ExportCheck : sig
   datatype typ = Ty of string * typ list | Tv of variable * string set
   datatype term = Ct of string * typ | Fv of variable * typ | Bv of nat |
     Abs of typ * term | App of term * term
-  type num
   datatype proofterm = PAxm of term * ((variable * string set) * typ) list |
     PBound of nat | Abst of typ * proofterm | AbsP of term * proofterm |
     Appt of proofterm * term | AppP of proofterm * proofterm |
@@ -44,22 +43,11 @@ structure ExportCheck : sig
           (string * (string * string set list) list) list)
   datatype exetheory = ExeTheory of exesignature * term list
   val exereplay : exetheory -> proofterm -> term option
-  val exe_wf_sig : exesignature -> bool
-  val exe_sig_conds : exesignature -> bool
-  val exeis_std_sig : exesignature -> bool
   val exe_wf_theory : exetheory -> bool
   val exe_check_proof : exetheory -> proofterm -> term -> bool
   val int : IntInf.int -> int
   val nat : IntInf.int -> nat
-  val norm : term -> term option
   val sort : string list -> string set
-  val vars : term -> (variable * typ) list
-  val eq_typ : typ -> typ -> bool
-  val eq_var : variable -> variable -> bool
-  val eq_term : term -> term -> bool
-  val term_ok : exesignature -> term -> bool
-  val type_of : term -> typ option
-  val of_class : typ -> string -> term
 end = struct
 
 datatype int = Int_of_integer of IntInf.int;
@@ -326,8 +314,6 @@ val zero_nat : nat = Nat (0 : IntInf.int);
 
 fun nth (x :: xs) n =
   (if equal_nata n zero_nat then x else nth xs (minus_nat n one_nat));
-
-fun rev xs = fold (fn a => fn b => a :: b) xs [];
 
 fun zip [] ys = []
   | zip xs [] = []
@@ -1471,22 +1457,6 @@ fun int n = Int_of_integer n;
 
 fun nat n = nat_of_integer n;
 
-fun norm t = map_option eta_norm (beta_norm t);
-
 fun sort xs = Set xs;
-
-fun vars t = rev (add_vars t []);
-
-fun eq_typ a b = equal_typa a b;
-
-fun eq_var a b = equal_variablea a b;
-
-fun eq_term a b = equal_terma a b;
-
-fun term_ok s t = exeterm_oka s t;
-
-fun type_of t = typ_of t;
-
-fun of_class t c = mk_of_class t c;
 
 end; (*struct ExportCheck*)
