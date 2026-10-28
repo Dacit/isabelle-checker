@@ -1,3 +1,4 @@
+\<^marker>\<open>author Fabian Huch\<close>
 theory Example
   imports Main Check_Build
   options[record_proofs = 2]

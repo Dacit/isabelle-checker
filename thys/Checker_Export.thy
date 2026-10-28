@@ -1,3 +1,4 @@
+\<^marker>\<open>author Fabian Huch\<close>
 theory Checker_Export
   imports
     Metalogic_ProofChecker.CodeGen
@@ -485,8 +486,8 @@ declare [[code drop: exereplay]]
 lemma replay_indexed_code[code]:
   "exereplay (ExeTheory (ExeSignature cto tao sa) ax) P =
     replay_relation cto tao sa (set (execlasses sa)) ax P"
-  by (simp add: exereplay_def replay_relation_def replay_tables_def
-    replay_mapped_correct term_closed_mapped_def term_ok_mapped_correct)
+  by (simp add: replay_relation_def replay_tables_def replay_mapped_correct term_closed_mapped_def
+      term_ok_mapped_correct)
 
 
 text \<open>Optimized Export\<close>

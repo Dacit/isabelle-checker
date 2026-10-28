@@ -1,3 +1,4 @@
+\<^marker>\<open>author Fabian Huch\<close>
 theory Check_Build
   imports Pure
   keywords "check_theory" :: diag
