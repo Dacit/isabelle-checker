@@ -3813,7 +3813,21 @@ fun exe_wf_osig oss =
        (snd oss) andalso
       exe_osig_conds oss);
 
-fun exe_wf_siga (ExeSignature (cto, tao, sa)) =
+fun typ_ok_prepared arities r f (Ty (c, ts)) =
+  (case lookupa (fn k => ((k : string) = c)) arities of NONE => false
+    | SOME ar =>
+      equal_nata (size_list ts) ar andalso
+        list_all (typ_ok_prepared arities r f) ts)
+  | typ_ok_prepared arities r f (Tv (v, s)) = wf_sort_set r f s;
+
+fun const_types_ok arities r f cto =
+  list_all (fn (_, a) => typ_ok_prepared arities r f a) cto;
+
+fun const_types_relation arities r cto =
+  const_types_ok arities r
+    (field (ceq_literal, ccompare_literal, set_impl_literal) r) cto;
+
+fun exe_wf_sig (ExeSignature (cto, tao, sa)) =
   exe_wf_osig sa andalso
     (set_eq (cenum_literal, ceq_literal, ccompare_literal)
        (image
@@ -3936,18 +3950,12 @@ fun exe_wf_siga (ExeSignature (cto, tao, sa)) =
              (fn ars =>
                equal_nata (the (lookupa (fn k => ((k : string) = typea)) tao))
                  (size_list ars))) andalso
-        ball (ceq_typ, ccompare_typ)
-          (image
-            (ceq_prod ceq_literal ceq_typ,
-              ccompare_prod ccompare_literal ccompare_typ)
-            (ceq_typ, ccompare_typ, set_impl_typ) snd
-            (set (ceq_prod ceq_literal ceq_typ,
-                   ccompare_prod ccompare_literal ccompare_typ,
-                   set_impl_prod set_impl_literal set_impl_typ)
-              cto))
-          (exetyp_ok_sig (ExeSignature (cto, tao, sa)))));
-
-fun exe_wf_sig sigma = exe_wf_siga sigma;
+        const_types_relation tao
+          (set (ceq_prod ceq_literal ceq_literal,
+                 ccompare_prod ccompare_literal ccompare_literal,
+                 set_impl_prod set_impl_literal set_impl_literal)
+            (fst sa))
+          cto));
 
 val eq_transitive_ax : term =
   App (App (Ct ("Pure.imp",

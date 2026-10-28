@@ -167,6 +167,53 @@ lemma all_sorts_code[code]:
     all_sorts_sets_def wf_sort_correct)
 
 
+text \<open>Share the subclass relation and its field when checking constant types.\<close>
+
+fun typ_ok_prepared ::
+  "(name \<times> nat) list \<Rightarrow> (class \<times> class) set \<Rightarrow> class set \<Rightarrow> typ \<Rightarrow> bool" where
+  "typ_ok_prepared arities r f (Ty c Ts) =
+    (case lookup (\<lambda>k. k = c) arities of
+       None \<Rightarrow> False
+     | Some ar \<Rightarrow> length Ts = ar \<and> list_all (typ_ok_prepared arities r f) Ts)"
+| "typ_ok_prepared arities r f (Tv v S) = wf_sort_set r f S"
+
+lemma typ_ok_prepared_correct:
+  "typ_ok_prepared (exetyp_arity_of \<Sigma>)
+      (set (execlasses (exesorts \<Sigma>)))
+      (Field (set (execlasses (exesorts \<Sigma>)))) T = exetyp_ok_sig \<Sigma> T"
+  by (induction T)
+    (auto simp only: typ_ok_prepared.simps exetyp_ok_sig.simps
+      wf_sort_correct list_all_iff split: option.splits)
+
+definition const_types_ok ::
+  "(name \<times> nat) list \<Rightarrow> (class \<times> class) set \<Rightarrow> class set \<Rightarrow>
+    (name \<times> typ) list \<Rightarrow> bool" where
+  "const_types_ok arities r f cto =
+    list_all (\<lambda>(_, T). typ_ok_prepared arities r f T) cto"
+
+definition const_types_relation ::
+  "(name \<times> nat) list \<Rightarrow> (class \<times> class) set \<Rightarrow>
+    (name \<times> typ) list \<Rightarrow> bool" where
+  "const_types_relation arities r cto = const_types_ok arities r (Field r) cto"
+
+lemma const_types_relation_correct:
+  "const_types_relation tao (set (execlasses sa)) cto =
+    (\<forall>T \<in> snd ` set cto. exetyp_ok_sig (ExeSignature cto tao sa) T)"
+  unfolding const_types_relation_def const_types_ok_def
+  by (simp add: typ_ok_prepared_correct[symmetric] list_all_iff split_def)
+
+declare [[code drop: exe_wf_sig]]
+lemma wf_sig_shared_code[code]:
+  "exe_wf_sig (ExeSignature cto tao sa) =
+    (exe_wf_osig sa \<and>
+     fst ` set (exetcsigs sa) = fst ` set tao \<and>
+     (\<forall>type \<in> fst ` set (exetcsigs sa).
+       \<forall>ars \<in> snd ` set (the (lookup (\<lambda>k. k = type) (exetcsigs sa))).
+         the (lookup (\<lambda>k. k = type) tao) = length ars) \<and>
+     const_types_relation tao (set (execlasses sa)) cto)"
+  by (simp only: exe_wf_sig_code exe_wf_sig'.simps const_types_relation_correct)
+
+
 text \<open>Optimized Export\<close>
 
 export_code exe_check_proof exereplay exe_wf_theory
