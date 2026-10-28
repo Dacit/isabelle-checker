@@ -42,6 +42,7 @@ structure ExportCheck : sig
         ((string * string) list *
           (string * (string * string set list) list) list)
   datatype exetheory = ExeTheory of exesignature * term list
+  val exenormalize_sort : (string * string) list -> string set -> string set
   val exereplay : exetheory -> proofterm -> term option
   val exe_wf_theory : exetheory -> bool
   val exe_check_proof : exetheory -> proofterm -> term -> bool
