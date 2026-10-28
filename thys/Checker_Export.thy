@@ -1,8 +1,23 @@
 theory Checker_Export
   imports
-    Checker_Export_Original
+    Metalogic_ProofChecker.CodeGen
     Containers.Containers
 begin
+
+section \<open>Constants for better Interface\<close>
+
+definition int :: "integer \<Rightarrow> int" where
+  "int n = int_of_integer n"
+
+definition nat :: "integer \<Rightarrow> nat" where
+  "nat n = nat_of_integer n"
+
+definition sort :: "String.literal list \<Rightarrow> sort" where
+  "sort xs = set xs"
+
+definition eq_term :: "term \<Rightarrow> term \<Rightarrow> bool" where
+  "eq_term t1 t2 \<equiv> t1 = t2"
+
 
 section \<open>Containers Setup\<close>
 
@@ -219,6 +234,6 @@ text \<open>Optimized Export\<close>
 export_code exereplay exe_wf_theory
   Bv PBound Tv Free ExeTheory ExeSignature
   int nat sort exenormalize_sort eq_term
-  in SML module_name ExportCheck file_prefix set_export
+  in SML module_name ExportCheck file_prefix export
 
 end
