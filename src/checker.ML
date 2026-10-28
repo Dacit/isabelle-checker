@@ -94,15 +94,20 @@ fun proofterm f prf =
       case prf of
         Proofterm.PBound i => PBound (nat i)
       | Proofterm.Abst (_, SOME T, prf) => Abst (typ T, proof prf)
+      | Proofterm.Abst (_, NONE, _) => error "Ill-formed proof term: Abst NONE"
       | Proofterm.AbsP (_, SOME t, prf) => AbsP (term t, proof prf)
+      | Proofterm.AbsP (_, NONE, _) => error "Ill-formed proof term: AbsP NONE"
       | prf % SOME t => Appt (proof prf, term t)
+      | _ % NONE => error "Ill-formed proof term: Appt NONE" 
       | prf1 %% prf2 => AppP (proof prf1, proof prf2)
       | Proofterm.Hyp t => Hyp (term t)
       | Proofterm.PAxm (_, t, SOME Ts) => PAxm (term t, tsubst t Ts)
+      | Proofterm.PAxm (_, _, NONE) => error "Ill-formed proof term: PAxm NONE" 
       | Proofterm.PClass (T, c) => OfClass (typ T, c)
       | Proofterm.PThm (thm_header as {types = SOME _, ...}, thm_body) => f (thm_header, thm_body)
+      | Proofterm.PThm ({types = NONE, ...}, _) => error "Ill-formed proof term: PThm NONE"
       | Proofterm.Oracle _ => error "Rejecting oracle proof"
-      | _ => error "Ill-formed proof term"
+      | Proofterm.MinProof => error "Ill-formed proof term: MinProof"
   in proof prf end
 
 type osig = (name * name) list * (name * (class * sort list) list) list
