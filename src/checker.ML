@@ -47,7 +47,7 @@ signature CHECKER = sig
 
   (* checker *)
   val wf_theory: theory -> bool
-  val check_proof: theory -> proofterm -> term -> bool
+  val wf_theory_proof: theory -> proofterm -> term -> bool
 end
 
 structure Checker : CHECKER = struct
@@ -142,7 +142,9 @@ fun theory_of thy =
   (sign_of thy, Thm.all_axioms_of thy |> map (term o Thm.full_prop_of o Thm.unconstrainT o snd))
 
 fun wf_theory (sign, axioms) = C.exe_wf_theory (C.ExeTheory (C.ExeSignature sign, axioms))
-fun check_proof (sign, axioms) proofterm term =
-  C.exe_check_proof (C.ExeTheory (C.ExeSignature sign, axioms)) proofterm term
+fun wf_theory_proof (sign, axioms) proofterm term =
+  case C.exereplay (C.ExeTheory (C.ExeSignature sign, axioms)) proofterm of
+    NONE => false
+  | SOME term1 => C.eq_term term term1
 
 end

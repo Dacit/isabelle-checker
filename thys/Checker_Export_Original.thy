@@ -13,12 +13,14 @@ definition nat :: "integer \<Rightarrow> nat" where
 definition sort :: "String.literal list \<Rightarrow> sort" where
   "sort xs = set xs"
 
+definition eq_term :: "term \<Rightarrow> term \<Rightarrow> bool" where
+  "eq_term t1 t2 \<equiv> t1 = t2"
 
 section \<open>Normal export (+ constants)\<close>
 
 export_code exe_check_proof exereplay exe_wf_theory
   Bv PBound Tv Free ExeTheory ExeSignature
-  int nat sort exenormalize_sort
+  int nat sort exenormalize_sort eq_term
   in SML module_name ExportCheck file_prefix export
 
 end

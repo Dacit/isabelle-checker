@@ -45,10 +45,10 @@ structure ExportCheck : sig
   val exenormalize_sort : (string * string) list -> string set -> string set
   val exereplay : exetheory -> proofterm -> term option
   val exe_wf_theory : exetheory -> bool
-  val exe_check_proof : exetheory -> proofterm -> term -> bool
   val int : IntInf.int -> int
   val nat : IntInf.int -> nat
   val sort : string list -> string set
+  val eq_term : term -> term -> bool
 end = struct
 
 datatype int = Int_of_integer of IntInf.int;
@@ -4316,13 +4316,12 @@ fun exe_wf_theorya (ExeTheory (ExeSignature (cto, tao, sa), ax)) =
 
 fun exe_wf_theory theta = exe_wf_theorya theta;
 
-fun exe_check_proof e p res =
-  exe_wf_theorya e andalso equal_option equal_term (exereplay e p) (SOME res);
-
 fun int n = Int_of_integer n;
 
 fun nat n = nat_of_integer n;
 
 fun sort xs = set (ceq_literal, ccompare_literal, set_impl_literal) xs;
+
+fun eq_term t1 t2 = equal_terma t1 t2;
 
 end; (*struct ExportCheck*)

@@ -38,7 +38,7 @@ fun check_thy (thy: theory) trusted_thys =
 
       val proofterm = Checker.proofterm check_pthm p
       val ax1 = Inttab.dest (!seen) |> map (fst o snd)
-      val ok = Checker.check_proof (sign, ax0 @ ax1) proofterm (Checker.term t)
+      val ok = Checker.wf_theory_proof (sign, ax0 @ ax1) proofterm (Checker.term t)
     in if ok then () else error ("Incorrect proof term in " ^ name) end
 
     fun check_thm name thm =
