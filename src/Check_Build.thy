@@ -4,14 +4,14 @@ theory Check_Build
   keywords "check_theory" :: diag
 begin
 
-ML_file \<open>set_export.ML\<close>
+ML_file \<open>export.ML\<close>
 ML_file \<open>checker.ML\<close>
 
 ML \<open>
-fun check_thmss trusted ax0 seen0 thmss thy =
+fun check_thmss trusted (checked0, seen0) thmss thy =
   let
     val (theory as (sign, ax)) = Checker.theory_of thy
-    val ax1 = ax0 @ ax
+    val ax1 = map (fst o snd) checked0 @ ax
     val _ = if Checker.wf_theory theory then () else error "Theory not well-formed"
 
     val seen = Unsynchronized.ref seen0
@@ -62,7 +62,7 @@ fun check_current thy =
       Theory.ancestors_of thy |> map (rpair () o Context.theory_long_name) |> Symtab.make
     val parent_facts = Theory.parents_of thy |> map Global_Theory.facts_of
     val thmss = Global_Theory.facts_of thy |> Facts.dest_static true parent_facts
-    val (checked, _) = check_thmss trusted [] Inttab.empty thmss thy
+    val (checked, _) = check_thmss trusted ([], Inttab.empty) thmss thy
   in checked |> map fst |> filter_out (equal "") end
 
 val _ =
@@ -73,6 +73,22 @@ val _ =
           val thy = Toplevel.theory_of st
           val checked = check_current thy
         in checked |> map Pretty.str |> Pretty.chunks |> Pretty.writeln end)))
+
+fun check_theory theory_name trusted_theories =
+  let
+    fun check_segment trusted ({prev_state, state, ...}, results0) =
+      let 
+        val thy0 = Toplevel.theory_of prev_state
+        val thy1 = Toplevel.theory_of state
+        val thmss =
+          Facts.dest_static true [Global_Theory.facts_of thy0] (Global_Theory.facts_of thy1)
+      in if null thmss then results0 else check_thmss trusted results0 thmss thy1 end
+
+    val trusted = Symtab.make trusted_theories
+    val segments = Build.get_theory_segments theory_name
+    val (checked, seen) = List.foldl (check_segment trusted) ([], Inttab.empty) segments
+    val checked1 = Inttab.dest seen |> map (fst o snd) |> filter_out (equal "")
+  in map fst checked @ checked1 end
 \<close>
 
 end
