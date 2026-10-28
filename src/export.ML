@@ -42,13 +42,13 @@ structure ExportCheck : sig
         ((string * string) list *
           (string * (string * string set list) list) list)
   datatype exetheory = ExeTheory of exesignature * term list
-  val exenormalize_sort : (string * string) list -> string set -> string set
-  val exereplay : exetheory -> proofterm -> term option
-  val exe_wf_theory : exetheory -> bool
   val int : IntInf.int -> int
   val nat : IntInf.int -> nat
   val sort : string list -> string set
+  val exereplay : exetheory -> proofterm -> term option
   val eq_term : term -> term -> bool
+  val exe_wf_theory : exetheory -> bool
+  val exenormalize_sort : (string * string) list -> string set -> string set
 end = struct
 
 datatype int = Int_of_integer of IntInf.int;
@@ -260,7 +260,7 @@ val rbt_keys_generator :
 fun lt_of_comp acomp x y =
   (case acomp x y of Eq => false | Lt => true | Gt => false);
 
-datatype ('b, 'a) mapping_rbt = Mapping_RBT of ('b, 'a) rbt;
+datatype ('b, 'a) mapping_rbt = Mapping_RBTa of ('b, 'a) rbt;
 
 datatype 'a set_dlist = Abs_dlist of 'a list;
 
@@ -275,11 +275,11 @@ fun list_all p [] = true
 
 fun dlist_all A_ x xc = list_all x (list_of_dlist A_ xc);
 
-fun impl_of B_ (Mapping_RBT x) = x;
+fun impl_ofa B_ (Mapping_RBTa x) = x;
 
 fun rbt_init x = ([], x);
 
-fun init A_ xa = rbt_init (impl_of A_ xa);
+fun init A_ xa = rbt_init (impl_ofa A_ xa);
 
 type 'a cenum =
   {cEnum :
@@ -312,13 +312,13 @@ fun rbt_comp_lookup c Empty k = NONE
     (case c k x of Eq => SOME y | Lt => rbt_comp_lookup c l k
       | Gt => rbt_comp_lookup c r k);
 
-fun lookup A_ xa = rbt_comp_lookup (the (ccompare A_)) (impl_of A_ xa);
+fun lookupb A_ xa = rbt_comp_lookup (the (ccompare A_)) (impl_ofa A_ xa);
 
 fun equal_unita u v = true;
 
 val equal_unit = {equal = equal_unita} : unit equal;
 
-fun memberb A_ t x = equal_option equal_unit (lookup A_ t x) (SOME ());
+fun memberb A_ t x = equal_option equal_unit (lookupb A_ t x) (SOME ());
 
 fun member (A1_, A2_) x (Set_Monad xs) =
   (case ceq A1_
@@ -523,7 +523,7 @@ fun rbt_comp_insert c =
   rbt_comp_insert_with_key c (fn _ => fn _ => fn nv => nv);
 
 fun insertc A_ xc xd xe =
-  Mapping_RBT (rbt_comp_insert (the (ccompare A_)) xc xd (impl_of A_ xe));
+  Mapping_RBTa (rbt_comp_insert (the (ccompare A_)) xc xd (impl_ofa A_ xe));
 
 fun rbt_baliR t1 ab bb (Branch (R, t2, aa, ba, Branch (R, t3, a, b, t4))) =
   Branch (R, Branch (B, t1, ab, bb, t2), aa, ba, Branch (B, t3, a, b, t4))
@@ -673,9 +673,9 @@ fun rbt_comp_union_with_key c f t1 t2 =
   paint B (rbt_comp_union_swap_rec c f false t1 t2);
 
 fun join A_ xc xd xe =
-  Mapping_RBT
-    (rbt_comp_union_with_key (the (ccompare A_)) xc (impl_of A_ xd)
-      (impl_of A_ xe));
+  Mapping_RBTa
+    (rbt_comp_union_with_key (the (ccompare A_)) xc (impl_ofa A_ xd)
+      (impl_ofa A_ xe));
 
 fun list_insert equal x xs = (if list_member equal xs x then xs else x :: xs);
 
@@ -695,11 +695,12 @@ fun is_none NONE = true
   | is_none (SOME x) = false;
 
 fun inter_list A_ xb xc =
-  Mapping_RBT
+  Mapping_RBTa
     (fold (fn k => rbt_comp_insert (the (ccompare A_)) k ())
       (filtera
         (fn x =>
-          not (is_none (rbt_comp_lookup (the (ccompare A_)) (impl_of A_ xb) x)))
+          not (is_none
+                (rbt_comp_lookup (the (ccompare A_)) (impl_ofa A_ xb) x)))
         xc)
       Empty);
 
@@ -779,7 +780,7 @@ fun gen_entries [] Empty = []
 fun entries x = gen_entries [] x;
 
 fun filterc A_ xb xc =
-  Mapping_RBT (rbtreeify (filtera xb (entries (impl_of A_ xc))));
+  Mapping_RBTa (rbtreeify (filtera xb (entries (impl_ofa A_ xc))));
 
 fun map_filter f [] = []
   | map_filter f (x :: xs) =
@@ -838,9 +839,9 @@ fun rbt_comp_inter_with_key c f t1 t2 =
   paint B (rbt_comp_inter_swap_rec c f false t1 t2);
 
 fun meet A_ xc xd xe =
-  Mapping_RBT
-    (rbt_comp_inter_with_key (the (ccompare A_)) xc (impl_of A_ xd)
-      (impl_of A_ xe));
+  Mapping_RBTa
+    (rbt_comp_inter_with_key (the (ccompare A_)) xc (impl_ofa A_ xd)
+      (impl_ofa A_ xe));
 
 fun filterb A_ xb xc = Abs_dlist (filtera xb (list_of_dlist A_ xc));
 
@@ -1220,7 +1221,7 @@ fun gen_keys [] Empty = []
 
 fun keys x = gen_keys [] x;
 
-fun keysa A_ xa = keys (impl_of A_ xa);
+fun keysa A_ xa = keys (impl_ofa A_ xa);
 
 fun csorted_list_of_set (A1_, A2_) (Set_Monad xs) =
   (case ccompare A2_
@@ -1246,19 +1247,19 @@ fun csorted_list_of_set (A1_, A2_) (Set_Monad xs) =
           (fn _ => csorted_list_of_set (A1_, A2_) (RBT_set rbt))
       | SOME _ => keysa A2_ rbt);
 
-fun emptya A_ = Mapping_RBT Empty;
+fun emptyc A_ = Mapping_RBTa Empty;
 
-fun empty A_ = Abs_dlist [];
+fun emptyb A_ = Abs_dlist [];
 
 fun set_empty_choose (A1_, A2_) =
   (case ccompare A2_
     of NONE =>
-      (case ceq A1_ of NONE => Set_Monad [] | SOME _ => DList_set (empty A1_))
-    | SOME _ => RBT_set (emptya A2_));
+      (case ceq A1_ of NONE => Set_Monad [] | SOME _ => DList_set (emptyb A1_))
+    | SOME _ => RBT_set (emptyc A2_));
 
 fun set_empty (A1_, A2_) Set_Collect = Collect_set (fn _ => false)
-  | set_empty (A1_, A2_) Set_DList = DList_set (empty A1_)
-  | set_empty (A1_, A2_) Set_RBT = RBT_set (emptya A2_)
+  | set_empty (A1_, A2_) Set_DList = DList_set (emptyb A1_)
+  | set_empty (A1_, A2_) Set_RBT = RBT_set (emptyc A2_)
   | set_empty (A1_, A2_) Set_Monada = Set_Monad []
   | set_empty (A1_, A2_) Set_Choose = set_empty_choose (A1_, A2_);
 
@@ -1739,12 +1740,6 @@ val set_impl_terma : (term, set_impla) phantom = Phantom Set_Choose;
 
 val set_impl_term = {set_impl = set_impl_terma} : term set_impl;
 
-val cEnum_term :
-  (term list * (((term -> bool) -> bool) * ((term -> bool) -> bool))) option
-  = NONE;
-
-val cenum_term = {cEnum = cEnum_term} : term cenum;
-
 val ccompare_terma : (term -> term -> ordera) option = NONE;
 
 val ccompare_term = {ccompare = ccompare_terma} : term ccompare;
@@ -1896,6 +1891,19 @@ val finite_UNIV_literala : (string, bool) phantom = Phantom false;
 val finite_UNIV_literal = {finite_UNIV = finite_UNIV_literala} :
   string finite_UNIV;
 
+datatype mapping_impla = Mapping_Choose | Mapping_Assoc_List | Mapping_RBT |
+  Mapping_Mapping;
+
+val mapping_impl_literala : (string, mapping_impla) phantom =
+  Phantom Mapping_RBT;
+
+type 'a mapping_impl = {mapping_impl : ('a, mapping_impla) phantom};
+val mapping_impl = #mapping_impl :
+  'a mapping_impl -> ('a, mapping_impla) phantom;
+
+val mapping_impl_literal = {mapping_impl = mapping_impl_literala} :
+  string mapping_impl;
+
 fun cproper_interval_literala xso yso = (raise Fail "undefined");
 
 val cproper_interval_literal =
@@ -1928,11 +1936,11 @@ fun set_impl_proda A_ B_ =
 fun set_impl_prod A_ B_ = {set_impl = set_impl_proda A_ B_} :
   ('a * 'b) set_impl;
 
-fun map f [] = []
-  | map f (x21 :: x22) = f x21 :: map f x22;
+fun mapa f [] = []
+  | mapa f (x21 :: x22) = f x21 :: mapa f x22;
 
 fun product [] uu = []
-  | product (x :: xs) ys = map (fn a => (x, a)) ys @ product xs ys;
+  | product (x :: xs) ys = mapa (fn a => (x, a)) ys @ product xs ys;
 
 fun cEnum_prod A_ B_ =
   (case cEnum A_ of NONE => NONE
@@ -2002,6 +2010,11 @@ val zero_neq_one_integer =
   {one_zero_neq_one = one_integer, zero_zero_neq_one = zero_integer} :
   IntInf.int zero_neq_one;
 
+datatype ('b, 'a) alist = Alist of ('b * 'a) list;
+
+datatype ('a, 'b) mapping = Assoc_List_Mapping of ('a, 'b) alist |
+  RBT_Mapping of ('a, 'b) mapping_rbt | Mapping of ('a -> 'b option);
+
 datatype proofterm = PAxm of term * ((variable * string set) * typ) list |
   PBound of nat | Abst of typ * proofterm | AbsP of term * proofterm |
   Appt of proofterm * term | AppP of proofterm * proofterm |
@@ -2021,7 +2034,7 @@ datatype 'a semilattice_set = Abs_semilattice_set of ('a -> 'a -> 'a);
 
 fun comp_fun_idem_apply (Abs_comp_fun_idem x) = x;
 
-fun foldb A_ x xc = folda (fn a => fn _ => x a) (impl_of A_ xc);
+fun foldb A_ x xc = folda (fn a => fn _ => x a) (impl_ofa A_ xc);
 
 fun set_fold_cfi (A1_, A2_) f b (RBT_set rbt) =
   (case ccompare A2_
@@ -2060,7 +2073,7 @@ fun sup_setb (A1_, A2_, A3_, A4_, A5_) a =
     else (raise Fail "Sup: infinite")
            (fn _ => sup_setb (A1_, A2_, A3_, A4_, A5_) a));
 
-fun fun_upd equal f aa b a = (if equal aa a then b else f a);
+fun fun_upda equal f aa b a = (if equal aa a then b else f a);
 
 fun balance_right a k x (Branch (R, b, s, y, c)) =
   Branch (R, a, k, x, Branch (B, b, s, y, c))
@@ -2149,7 +2162,7 @@ and rbt_comp_del_from_right c x a y s (Branch (B, lt, z, v, rt)) =
 fun rbt_comp_delete c k t = paint B (rbt_comp_del c k t);
 
 fun delete A_ xb xc =
-  Mapping_RBT (rbt_comp_delete (the (ccompare A_)) xb (impl_of A_ xc));
+  Mapping_RBTa (rbt_comp_delete (the (ccompare A_)) xb (impl_ofa A_ xc));
 
 fun list_remove1 equal x [] = []
   | list_remove1 equal x (y :: xs) =
@@ -2177,7 +2190,7 @@ fun insert (A1_, A2_) xa (Complement x) = Complement (remove (A1_, A2_) xa x)
       of NONE =>
         (raise Fail "insert Collect_set: ceq = None")
           (fn _ => insert (A1_, A2_) x (Collect_set a))
-      | SOME eq => Collect_set (fun_upd eq a x true))
+      | SOME eq => Collect_set (fun_upda eq a x true))
 and remove (A1_, A2_) x (Complement a) = Complement (insert (A1_, A2_) x a)
   | remove (A1_, A2_) x (RBT_set rbt) =
     (case ccompare A2_
@@ -2196,7 +2209,7 @@ and remove (A1_, A2_) x (Complement a) = Complement (insert (A1_, A2_) x a)
       of NONE =>
         (raise Fail "remove Collect: ceq = None")
           (fn _ => remove (A1_, A2_) x (Collect_set a))
-      | SOME eq => Collect_set (fun_upd eq a x false));
+      | SOME eq => Collect_set (fun_upda eq a x false));
 
 fun image (A1_, A2_) (B1_, B2_, B3_) h (RBT_set rbt) =
   (case ccompare A2_
@@ -2216,7 +2229,7 @@ fun image (A1_, A2_) (B1_, B2_, B3_) h (RBT_set rbt) =
   | image (A1_, A2_) (B1_, B2_, B3_) f (Collect_set a) =
     (raise Fail "image Collect_set")
       (fn _ => image (A1_, A2_) (B1_, B2_, B3_) f (Collect_set a))
-  | image (A1_, A2_) (B1_, B2_, B3_) f (Set_Monad xs) = Set_Monad (map f xs);
+  | image (A1_, A2_) (B1_, B2_, B3_) f (Set_Monad xs) = Set_Monad (mapa f xs);
 
 fun fva (Ct (uu, uv)) =
   set_empty
@@ -2274,7 +2287,7 @@ fun rBT_Impl_rbt_ex p Empty = false
   | rBT_Impl_rbt_ex p (Branch (c, l, k, v, r)) =
     p k v orelse (rBT_Impl_rbt_ex p l orelse rBT_Impl_rbt_ex p r);
 
-fun ex A_ xb xc = rBT_Impl_rbt_ex xb (impl_of A_ xc);
+fun ex A_ xb xc = rBT_Impl_rbt_ex xb (impl_ofa A_ xc);
 
 fun bex (A1_, A2_) (RBT_set rbt) p =
   (case ccompare A2_
@@ -2297,8 +2310,6 @@ fun minus_nat m n =
 fun nth (x :: xs) n =
   (if equal_nata n zero_nat then x else nth xs (minus_nat n one_nat));
 
-fun rev xs = fold (fn a => fn b => a :: b) xs [];
-
 fun zip [] ys = []
   | zip xs [] = []
   | zip (x :: xs) (y :: ys) = (x, y) :: zip xs ys;
@@ -2307,7 +2318,7 @@ fun rBT_Impl_rbt_all p Empty = true
   | rBT_Impl_rbt_all p (Branch (c, l, k, v, r)) =
     p k v andalso (rBT_Impl_rbt_all p l andalso rBT_Impl_rbt_all p r);
 
-fun all A_ xb xc = rBT_Impl_rbt_all xb (impl_of A_ xc);
+fun all A_ xb xc = rBT_Impl_rbt_all xb (impl_ofa A_ xc);
 
 fun ball (A1_, A2_) (RBT_set rbt) p =
   (case ccompare A2_
@@ -2342,6 +2353,9 @@ fun decr lev (Bv i) =
 fun foldl f a [] = a
   | foldl f a (x :: xs) = foldl f (f a x) xs;
 
+fun foldr f [] = id
+  | foldr f (x :: xs) = f x o foldr f xs;
+
 fun membera A_ [] y = false
   | membera A_ (x :: xs) y = eq A_ x y orelse membera A_ xs y;
 
@@ -2349,16 +2363,19 @@ fun inserta A_ x xs = (if membera A_ xs x then xs else x :: xs);
 
 fun union A_ = fold (inserta A_);
 
+fun map_of A_ [] k = NONE
+  | map_of A_ ((l, v) :: ps) k = (if eq A_ l k then SOME v else map_of A_ ps k);
+
 fun filter (A1_, A2_) p a = inf_seta (A1_, A2_) a (Collect_set p);
 
-fun lookupa uu [] = NONE
-  | lookupa f ((x, y) :: xs) = (if f x then SOME y else lookupa f xs);
+fun lookupc uu [] = NONE
+  | lookupc f ((x, y) :: xs) = (if f x then SOME y else lookupc f xs);
 
 fun bind NONE f = NONE
   | bind (SOME x) f = f x;
 
 fun assoc_match (Tv (v, s)) t subs =
-  (case lookupa
+  (case lookupc
           (fn x =>
             equal_proda equal_variable
               (equal_set
@@ -2396,6 +2413,12 @@ fun typ_of1 uu (Ct (uv, t)) = SOME t
 
 fun typ_of t = typ_of1 [] t;
 
+fun fun_upd A_ f a b = (fn x => (if eq A_ x a then b else f x));
+
+fun update A_ k v [] = [(k, v)]
+  | update A_ k v (p :: ps) =
+    (if eq A_ (fst p) k then (k, v) :: ps else p :: update A_ k v ps);
+
 fun bind_fv2 vT n (Fv (v, t)) =
   (if equal_proda equal_variable equal_typ vT (v, t) then Bv n else Fv (v, t))
   | bind_fv2 vT n (Abs (ta, t)) = Abs (ta, bind_fv2 vT (plus_nat n one_nat) t)
@@ -2407,6 +2430,8 @@ fun bind_fv vT t = bind_fv2 vT zero_nat t;
 
 fun mk_type ty = Ct ("Pure.type", Ty ("itself", [ty]));
 
+val empty : ('a, 'b) alist = Alist [];
+
 fun hda (x21 :: x22) = x21;
 
 fun hd A_ xa = hda (list_of_dlist A_ xa);
@@ -2415,6 +2440,9 @@ fun tla [] = []
   | tla (x21 :: x22) = x22;
 
 fun tl A_ xa = Abs_dlist (tla (list_of_dlist A_ xa));
+
+fun map f Empty = Empty
+  | map f (Branch (c, lt, k, v, rt)) = Branch (c, map f lt, k, f k v, map f rt);
 
 fun incr_bv inc n (Bv i) =
   (if less_eq_nat n i then Bv (plus_nat i inc) else Bv i)
@@ -2444,6 +2472,12 @@ fun subst_bv2 (Bv i) n u =
 
 fun subst_bv u t = subst_bv2 t zero_nat u;
 
+fun impl_of (Alist x) = x;
+
+fun lookup A_ xa = map_of A_ (impl_of xa);
+
+fun updatea A_ xc xd xe = Alist (update A_ xc xd (impl_of xe));
+
 fun distinct A_ [] = true
   | distinct A_ (x :: xs) = not (membera A_ xs x) andalso distinct A_ xs;
 
@@ -2454,13 +2488,24 @@ fun set_aux (A1_, A2_) Set_Monada = Set_Monad
         (case ceq A1_ of NONE => Set_Monad
           | SOME _ =>
             foldl (fn s => fn x => insert (A1_, A2_) x s)
-              (DList_set (empty A1_)))
+              (DList_set (emptyb A1_)))
       | SOME _ =>
-        foldl (fn s => fn x => insert (A1_, A2_) x s) (RBT_set (emptya A2_)))
+        foldl (fn s => fn x => insert (A1_, A2_) x s) (RBT_set (emptyc A2_)))
   | set_aux (A1_, A2_) impl =
     foldl (fn s => fn x => insert (A1_, A2_) x s) (set_empty (A1_, A2_) impl);
 
 fun set (A1_, A2_, A3_) xs = set_aux (A1_, A2_) (of_phantom (set_impl A3_)) xs;
+
+fun mapping_empty_choose A_ =
+  (case ccompare A_ of NONE => Assoc_List_Mapping empty
+    | SOME _ => RBT_Mapping (emptyc A_));
+
+fun mapping_empty A_ Mapping_RBT = RBT_Mapping (emptyc A_)
+  | mapping_empty A_ Mapping_Assoc_List = Assoc_List_Mapping empty
+  | mapping_empty A_ Mapping_Mapping = Mapping (fn _ => NONE)
+  | mapping_empty A_ Mapping_Choose = mapping_empty_choose A_;
+
+fun emptya (A1_, A2_) = mapping_empty A1_ (of_phantom (mapping_impl A2_));
 
 fun betapply (Abs (uu, t)) u = subst_bv u t
   | betapply (Ct (v, va)) u = App (Ct (v, va), u)
@@ -2504,6 +2549,19 @@ fun replicate n x =
   (if equal_nata n zero_nat then []
     else x :: replicate (minus_nat n one_nat) x);
 
+fun lookupa (A1_, A2_) (RBT_Mapping t) = lookupb A1_ t
+  | lookupa (A1_, A2_) (Assoc_List_Mapping al) = lookup A2_ al;
+
+fun updateb (A1_, A2_) k v (RBT_Mapping t) =
+  (case ccompare A1_
+    of NONE =>
+      (raise Fail "update RBT_Mapping: ccompare = None")
+        (fn _ => updateb (A1_, A2_) k v (RBT_Mapping t))
+    | SOME _ => RBT_Mapping (insertc A1_ k v t))
+  | updateb (A1_, A2_) k v (Assoc_List_Mapping al) =
+    Assoc_List_Mapping (updatea A2_ k v al)
+  | updateb (A1_, A2_) k v (Mapping m) = Mapping (fun_upd A2_ m k (SOME v));
+
 fun hyps (Abst (uu, p)) = hyps p
   | hyps (AbsP (uv, p)) = hyps p
   | hyps (Appt (p, uw)) = hyps p
@@ -2520,7 +2578,7 @@ fun rBT_Impl_fold1 f Empty = (raise Fail "undefined")
     folda (fn kb => fn _ => f kb) r
       (f k (rBT_Impl_fold1 f (Branch (c, l, ka, va, ra))));
 
-fun fold1 A_ x xc = rBT_Impl_fold1 x (impl_of A_ xc);
+fun fold1 A_ x xc = rBT_Impl_fold1 x (impl_ofa A_ xc);
 
 fun domain (A1_, A2_, A3_) (B1_, B2_) r =
   image (ceq_prod A1_ B1_, ccompare_prod A2_ B2_) (A1_, A2_, A3_) fst r;
@@ -2548,7 +2606,7 @@ fun integer_of_char (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
                    zero_neq_one_integer
                    b1), (2 : IntInf.int)), of_bool zero_neq_one_integer b0);
 
-fun implode cs = Str_Literal.literal_of_asciis (map integer_of_char cs);
+fun implode cs = Str_Literal.literal_of_asciis (mapa integer_of_char cs);
 
 fun fold_aterms f (App (t, u)) s = fold_aterms f u (fold_aterms f t s)
   | fold_aterms f (Abs (uu, t)) s = fold_aterms f t s
@@ -2693,7 +2751,7 @@ val eq_intr_ax : term =
 fun semilattice_set_apply (Abs_semilattice_set x) = x;
 
 fun is_empty A_ xa =
-  (case impl_of A_ xa of Empty => true | Branch (_, _, _, _, _) => false);
+  (case impl_ofa A_ xa of Empty => true | Branch (_, _, _, _, _) => false);
 
 fun set_fold1 (A1_, A2_, A3_) f (RBT_set rbt) =
   (case ccompare A2_
@@ -2767,12 +2825,15 @@ fun char_of_integer k = let
                           Chara (b0, b1, b2, b3, b4, b5, b6, a)
                         end;
 
-fun explode s = map char_of_integer (Str_Literal.asciis_of_literal s);
+fun explode s = mapa char_of_integer (Str_Literal.asciis_of_literal s);
 
 fun mk_of_class ty c =
   App (Ct (implode (explode c @ explode "_class"),
             Ty ("fun", [Ty ("itself", [ty]), Ty ("prop", [])])),
         mk_type ty);
+
+fun of_alist (A1_, A2_, A3_) xs =
+  foldr (fn (a, b) => updateb (A1_, A2_) a b) xs (emptya (A1_, A3_));
 
 fun fresh_namea s =
   implode
@@ -2781,22 +2842,7 @@ fun fresh_namea s =
         (ceq_list ceq_char, ccompare_list ccompare_char, set_impl_list) explode
         s));
 
-fun rbt_product f rbt1 rbt2 =
-  rbtreeify
-    (rev (folda
-           (fn a => fn b =>
-             folda (fn c => fn d => (fn e => ((a, c), f a b c d) :: e)) rbt2)
-           rbt1 []));
-
-fun productd A_ B_ xc xd xe =
-  Mapping_RBT (rbt_product xc (impl_of A_ xd) (impl_of B_ xe));
-
-fun producta A_ B_ rbt1 rbt2 =
-  productd A_ B_ (fn _ => fn _ => fn _ => fn _ => ()) rbt1 rbt2;
-
-fun refl_on (A1_, A2_) a r =
-  ball (A1_, A2_) a
-    (fn x => member (ceq_prod A1_ A1_, ccompare_prod A2_ A2_) (x, x) r);
+fun mapb A_ xb xc = Mapping_RBTa (map xb (impl_ofa A_ xc));
 
 fun mk_all_list l t =
   fold (fn (n, ta) => fn acc =>
@@ -2806,25 +2852,21 @@ fun mk_all_list l t =
                Abs (ta, bind_fv (n, ta) acc)))
     l t;
 
-fun productb A_ B_ dxs1 dxs2 =
-  Abs_dlist
-    (foldc A_ (fn a => foldc B_ (fn c => (fn b => (a, c) :: b)) dxs2) dxs1 []);
+fun int n = Int_of_integer n;
 
-fun trans_on (A1_, A2_, A3_) a r =
-  ball (ceq_prod A1_ A1_, ccompare_prod A2_ A2_) r
-    (fn (x, y1) =>
-      (if member (A1_, A2_) x a
-        then (if member (A1_, A2_) y1 a
-               then ball (ceq_prod A1_ A1_, ccompare_prod A2_ A2_) r
-                      (fn (y2, z) =>
-                        (if eq A3_ y1 y2
-                          then (if member (A1_, A2_) z a
-                                 then member
-(ceq_prod A1_ A1_, ccompare_prod A2_ A2_) (x, z) r
-                                 else true)
-                          else true))
-               else true)
-        else true));
+fun nat n = nat_of_integer n;
+
+fun map_valuesa xb xc = Alist (mapa (fn (x, y) => (x, xb x y)) (impl_of xc));
+
+fun map_values A_ f (RBT_Mapping t) =
+  (case ccompare A_
+    of NONE =>
+      (raise Fail "map_values RBT_Mapping: ccompare = None")
+        (fn _ => map_values A_ f (RBT_Mapping t))
+    | SOME _ => RBT_Mapping (mapb A_ f t))
+  | map_values A_ f (Assoc_List_Mapping al) =
+    Assoc_List_Mapping (map_valuesa f al)
+  | map_values A_ f (Mapping m) = Mapping (fn k => map_option (f k) (m k));
 
 fun fv_Proof (PAxm (t, uu)) = fva t
   | fv_Proof (PBound uv) =
@@ -2855,87 +2897,84 @@ fun fv_Proof (PAxm (t, uu)) = fva t
       (of_phantom (set_impl_proda set_impl_variable set_impl_typ))
   | fv_Proof (Hyp t) = fva t;
 
+fun sort xs = set (ceq_literal, ccompare_literal, set_impl_literal) xs;
+
 fun list_all2 p [] ys = null ys
   | list_all2 p xs [] = null xs
   | list_all2 p (x :: xs) (y :: ys) = p x y andalso list_all2 p xs ys;
 
 fun minus_list_set A_ xs ys = fold (removeAll A_) ys xs;
 
-fun exesort_ex (A1_, A2_, A3_, A4_) cs s =
-  less_eq_set (A1_, A2_, A3_) s
-    (field (A2_, A3_, A4_)
-      (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A4_ A4_)
-        cs));
+fun wf_sort_set r f s =
+  set_eq (cenum_literal, ceq_literal, ccompare_literal)
+    (filter (ceq_literal, ccompare_literal)
+      (fn c =>
+        not (bex (ceq_literal, ccompare_literal) s
+              (fn d =>
+                member
+                  (ceq_prod ceq_literal ceq_literal,
+                    ccompare_prod ccompare_literal ccompare_literal)
+                  (d, c) r andalso
+                  not (member
+                        (ceq_prod ceq_literal ceq_literal,
+                          ccompare_prod ccompare_literal ccompare_literal)
+                        (c, d) r))))
+      s)
+    s andalso
+    less_eq_set (cenum_literal, ceq_literal, ccompare_literal) s f;
 
-fun execlass_les A_ cs c1 c2 =
-  membera (equal_prod A_ A_) cs (c1, c2) andalso
-    not (membera (equal_prod A_ A_) cs (c2, c1));
-
-fun exenormalize_sort cs s =
-  filter (ceq_literal, ccompare_literal)
-    (fn c =>
-      not (bex (ceq_literal, ccompare_literal) s
-            (fn ca => execlass_les equal_literal cs ca c)))
-    s;
-
-fun exenormalized_sort cs s =
-  set_eq (cenum_literal, ceq_literal, ccompare_literal) (exenormalize_sort cs s)
-    s;
-
-fun exewf_sort sub s =
-  set_eq (cenum_literal, ceq_literal, ccompare_literal) s
-    (set_empty (ceq_literal, ccompare_literal)
-      (of_phantom set_impl_literala)) orelse
-    exenormalized_sort sub s andalso
-      exesort_ex
-        (cenum_literal, ceq_literal, ccompare_literal, set_impl_literal) sub s;
-
-fun exesig (ExeTheory (x1, x2)) = x1;
-
-fun execonst_type_of (ExeSignature (x1, x2, x3)) = x1;
-
-fun exetyp_arity_of (ExeSignature (x1, x2, x3)) = x2;
-
-fun exesorts (ExeSignature (x1, x2, x3)) = x3;
-
-fun exetyp_ok_sig sigma (Ty (c, ts)) =
-  (case lookupa (fn k => ((k : string) = c)) (exetyp_arity_of sigma)
-    of NONE => false
+fun typ_ok_mapped arities r f (Ty (c, ts)) =
+  (case lookupa (ccompare_literal, equal_literal) arities c of NONE => false
     | SOME ar =>
-      equal_nata (size_list ts) ar andalso list_all (exetyp_ok_sig sigma) ts)
-  | exetyp_ok_sig sigma (Tv (uu, s)) = exewf_sort (fst (exesorts sigma)) s;
+      equal_nata (size_list ts) ar andalso
+        list_all (typ_ok_mapped arities r f) ts)
+  | typ_ok_mapped arities r f (Tv (v, s)) = wf_sort_set r f s;
 
-fun exeterm_oka sigma (Fv (uu, t)) = exetyp_ok_sig sigma t
-  | exeterm_oka sigma (Bv uv) = true
-  | exeterm_oka sigma (Ct (s, t)) =
-    (case lookupa (fn k => ((k : string) = s)) (execonst_type_of sigma)
-      of NONE => false | SOME ty => exetyp_ok_sig sigma t andalso tinstT t ty)
-  | exeterm_oka sigma (App (t, u)) =
-    exeterm_oka sigma t andalso exeterm_oka sigma u
-  | exeterm_oka sigma (Abs (ta, t)) =
-    exetyp_ok_sig sigma ta andalso exeterm_oka sigma t;
+fun term_ok_mapped consts arities r f (Fv (v, t)) = typ_ok_mapped arities r f t
+  | term_ok_mapped consts arities r f (Bv n) = true
+  | term_ok_mapped consts arities r f (Ct (c, t)) =
+    (case lookupa (ccompare_literal, equal_literal) consts c of NONE => false
+      | SOME u => typ_ok_mapped arities r f t andalso tinstT t u)
+  | term_ok_mapped consts arities r f (App (t, u)) =
+    term_ok_mapped consts arities r f t andalso
+      term_ok_mapped consts arities r f u
+  | term_ok_mapped consts arities r f (Abs (ta, t)) =
+    typ_ok_mapped arities r f ta andalso term_ok_mapped consts arities r f t;
 
-fun exeterm_ok theta t =
-  exeterm_oka (exesig theta) t andalso not (is_none (typ_of t));
+fun term_closed_mapped consts arities r f t =
+  term_ok_mapped consts arities r f t andalso not (is_none (typ_of t));
 
-fun exeaxioms_of (ExeTheory (x1, x2)) = x2;
-
-fun execlass_leq A_ B_ cs c1 c2 = membera (equal_prod A_ B_) cs (c1, c2);
-
-fun exesort_leq (A1_, A2_, A3_) (B1_, B2_, B3_) sub s1 s2 =
-  ball (B1_, B2_) s2
-    (fn c_2 => bex (A1_, A2_) s1 (fn c_1 => execlass_leq A3_ B3_ sub c_1 c_2));
-
-fun exehas_sort oss (Tv (uu, sa)) s =
-  exesort_leq (ceq_literal, ccompare_literal, equal_literal)
-    (ceq_literal, ccompare_literal, equal_literal) (fst oss) sa s
-  | exehas_sort oss (Ty (a, ts)) s =
-    (case lookupa (fn k => ((k : string) = a)) (snd oss) of NONE => false
+fun has_sort_mapped r tcs (Tv (v, sa)) s =
+  sort_leq (ceq_literal, ccompare_literal) (ceq_literal, ccompare_literal) r sa
+    s
+  | has_sort_mapped r tcs (Ty (a, ts)) s =
+    (case lookupa (ccompare_literal, equal_literal) tcs a of NONE => false
       | SOME mgd =>
         ball (ceq_literal, ccompare_literal) s
           (fn c =>
-            (case lookupa (fn k => ((k : string) = c)) mgd of NONE => false
-              | SOME aa => list_all2 (exehas_sort oss) ts aa)));
+            (case lookupa (ccompare_literal, equal_literal) mgd c
+              of NONE => false
+              | SOME aa => list_all2 (has_sort_mapped r tcs) ts aa)));
+
+fun inst_ok_mapped arities r f tcs insts =
+  distinct
+    (equal_prod equal_variable
+      (equal_set (cenum_literal, ceq_literal, ccompare_literal, equal_literal)))
+    (mapa fst insts) andalso
+    (list_all (typ_ok_mapped arities r f) (mapa snd insts) andalso
+      list_all (fn (a, b) => let
+                               val (_, s) = a;
+                             in
+                               (fn t => has_sort_mapped r tcs t s)
+                             end
+                               b)
+        insts);
+
+fun close_axiom t =
+  mk_all_list
+    (minus_list_set (equal_prod equal_variable equal_typ) (add_vars t [])
+      (fold add_vars [] []))
+    t;
 
 fun partial_nth [] uu = NONE
   | partial_nth (x :: xs) n =
@@ -2965,10 +3004,10 @@ fun variant_variable (Free n) s =
 fun the_default a NONE = a
   | the_default uu (SOME b) = b;
 
-fun subst_typ insts (Ty (a, ts)) = Ty (a, map (subst_typ insts) ts)
+fun subst_typ insts (Ty (a, ts)) = Ty (a, mapa (subst_typ insts) ts)
   | subst_typ insts (Tv (idn, s)) =
     the_default (Tv (idn, s))
-      (lookupa
+      (lookupc
         (fn x =>
           equal_proda equal_variable
             (equal_set
@@ -2976,34 +3015,16 @@ fun subst_typ insts (Ty (a, ts)) = Ty (a, map (subst_typ insts) ts)
             x (idn, s))
         insts);
 
-fun exereplaya thy uu uv hs (PAxm (t, tis)) =
-  (if distinct
-        (equal_prod equal_variable
-          (equal_set
-            (cenum_literal, ceq_literal, ccompare_literal, equal_literal)))
-        (map fst tis) andalso
-        (list_all (exetyp_ok_sig (exesig thy)) (map snd tis) andalso
-          list_all
-            (fn (a, b) =>
-              let
-                val (_, s) = a;
-              in
-                (fn ta => exehas_sort (exesorts (exesig thy)) ta s)
-              end
-                b)
-            tis) andalso
-        exeterm_ok thy t
-    then (if membera equal_term (exeaxioms_of thy) t
-           then SOME (mk_all_list
-                       (minus_list_set (equal_prod equal_variable equal_typ)
-                         (add_vars (map_types (subst_typ tis) t) [])
-                         (fold add_vars [] []))
-                       (map_types (subst_typ tis) t))
-           else NONE)
+fun replay_mapped consts arities r f tcs ax uu uv hs (PAxm (t, tis)) =
+  (if inst_ok_mapped arities r f tcs tis andalso
+        term_closed_mapped consts arities r f t
+    then (if membera equal_term ax t
+           then SOME (close_axiom (map_types (subst_typ tis) t)) else NONE)
     else NONE)
-  | exereplaya thy uw ux hs (PBound n) = partial_nth hs n
-  | exereplaya thy vs ns hs (Abst (t, p)) =
-    (if exetyp_ok_sig (exesig thy) t
+  | replay_mapped consts arities r f tcs ax uw ux hs (PBound n) =
+    partial_nth hs n
+  | replay_mapped consts arities r f tcs ax vs ns hs (Abst (t, p)) =
+    (if typ_ok_mapped arities r f t
       then let
              val (s, nsa) = variant_variable (Free "default") ns;
            in
@@ -3014,13 +3035,13 @@ fun exereplaya thy uu uv hs (PAxm (t, tis)) =
                                 [Ty ("fun", [t, Ty ("prop", [])]),
                                   Ty ("prop", [])])),
                        Abs (t, bind_fv (s, t) ta)))
-               (exereplaya thy ((s, t) :: vs) nsa hs p)
+               (replay_mapped consts arities r f tcs ax ((s, t) :: vs) nsa hs p)
            end
       else NONE)
-  | exereplaya thy vs ns hs (Appt (p, t)) =
+  | replay_mapped consts arities r f tcs ax vs ns hs (Appt (p, t)) =
     let
-      val rep = exereplaya thy vs ns hs p;
-      val ta = subst_bvs (map (fn (a, b) => Fv (a, b)) vs) t;
+      val rep = replay_mapped consts arities r f tcs ax vs ns hs p;
+      val ta = subst_bvs (mapa (fn (a, b) => Fv (a, b)) vs) t;
     in
       (case (rep, typ_of ta) of (NONE, _) => NONE
         | (SOME (Ct (_, _)), _) => NONE | (SOME (Fv (_, _)), _) => NONE
@@ -3043,7 +3064,8 @@ fun exereplaya thy uu uv hs (PAxm (t, tis)) =
                      (((fun2 : string) = "fun") andalso
                        (((propT1 : string) = "prop") andalso
                          (((propT2 : string) = "prop") andalso
-                           (equal_typa tau taua andalso exeterm_ok thy ta)))))
+                           (equal_typa tau taua andalso
+                             term_closed_mapped consts arities r f ta)))))
                then SOME (betapply b ta) else NONE)
         | (SOME (App (Ct (_, Ty (_, Ty (_, [_, Ty (_, [])]) ::
                                       Ty (_, []) :: _ :: _)),
@@ -3076,13 +3098,13 @@ fun exereplaya thy uu uv hs (PAxm (t, tis)) =
         | (SOME (App (Abs (_, _), _)), _) => NONE
         | (SOME (App (App (_, _), _)), _) => NONE)
     end
-  | exereplaya thy vs ns hs (AbsP (t, p)) =
+  | replay_mapped consts arities r f tcs ax vs ns hs (AbsP (t, p)) =
     let
-      val ta = subst_bvs (map (fn (a, b) => Fv (a, b)) vs) t;
-      val rep = exereplaya thy vs ns (ta :: hs) p;
+      val ta = subst_bvs (mapa (fn (a, b) => Fv (a, b)) vs) t;
+      val rep = replay_mapped consts arities r f tcs ax vs ns (ta :: hs) p;
     in
       (if equal_option equal_typ (typ_of ta) (SOME (Ty ("prop", []))) andalso
-            exeterm_ok thy ta
+            term_closed_mapped consts arities r f ta
         then map_option
                (fn a =>
                  App (App (Ct ("Pure.imp",
@@ -3095,13 +3117,13 @@ fun exereplaya thy uu uv hs (PAxm (t, tis)) =
                rep
         else NONE)
     end
-  | exereplaya thy vs ns hs (AppP (p1, p2)) =
+  | replay_mapped consts arities r f tcs ax vs ns hs (AppP (p1, p2)) =
     let
       val rep1 =
-        bind (exereplaya thy vs ns hs p1)
+        bind (replay_mapped consts arities r f tcs ax vs ns hs p1)
           (fn t => map_option eta_norm (beta_norm t));
       val rep2 =
-        bind (exereplaya thy vs ns hs p2)
+        bind (replay_mapped consts arities r f tcs ax vs ns hs p2)
           (fn t => map_option eta_norm (beta_norm t));
     in
       (case (rep1, rep2) of (NONE, _) => NONE | (SOME (Ct (_, _)), _) => NONE
@@ -3191,16 +3213,14 @@ fun exereplaya thy uu uv hs (PAxm (t, tis)) =
         | (SOME (App (App (Abs (_, _), _), _)), _) => NONE
         | (SOME (App (App (App (_, _), _), _)), _) => NONE)
     end
-  | exereplaya thy vs ns hs (OfClass (ty, c)) =
-    (if exehas_sort (exesorts (exesig thy)) ty
+  | replay_mapped consts arities r f tcs ax vs ns hs (OfClass (ty, c)) =
+    (if has_sort_mapped r tcs ty
           (insert (ceq_literal, ccompare_literal) c
             (set_empty (ceq_literal, ccompare_literal)
               (of_phantom set_impl_literala))) andalso
-          exetyp_ok_sig (exesig thy) ty
-      then (case lookupa
-                   (fn k =>
-                     ((k : string) = (implode (explode c @ explode "_class"))))
-                   (execonst_type_of (exesig thy))
+          typ_ok_mapped arities r f ty
+      then (case lookupa (ccompare_literal, equal_literal) consts
+                   (implode (explode c @ explode "_class"))
              of NONE => NONE | SOME (Ty (_, [])) => NONE
              | SOME (Ty (_, Ty (_, []) :: _)) => NONE
              | SOME (Ty (_, [Ty (_, [_])])) => NONE
@@ -3219,16 +3239,16 @@ fun exereplaya thy uu uv hs (PAxm (t, tis)) =
              | SOME (Ty (_, Ty (_, _ :: _ :: _) :: _)) => NONE
              | SOME (Ty (_, Tv (_, _) :: _)) => NONE | SOME (Tv (_, _)) => NONE)
       else NONE)
-  | exereplaya thy vs ns hs (Hyp t) =
+  | replay_mapped consts arities r f tcs ax vs ns hs (Hyp t) =
     (if membera equal_term hs t then SOME t else NONE);
 
-fun exereplay thy p =
+fun replay_tables consts arities r f tcs ax p =
   (if list_all
         (fn x =>
-          exeterm_ok thy x andalso
+          term_closed_mapped consts arities r f x andalso
             equal_option equal_typ (typ_of x) (SOME (Ty ("prop", []))))
         (hyps p)
-    then bind (exereplaya thy []
+    then bind (replay_mapped consts arities r f tcs ax []
                 (image
                   (ceq_prod ceq_variable ceq_typ,
                     ccompare_prod ccompare_variable ccompare_typ)
@@ -3242,6 +3262,26 @@ fun exereplay thy p =
                 (hyps p) p)
            (fn t => map_option eta_norm (beta_norm t))
     else NONE);
+
+fun mapped_tcs tcs =
+  map_values ccompare_literal
+    (fn _ => of_alist (ccompare_literal, equal_literal, mapping_impl_literal))
+    (of_alist (ccompare_literal, equal_literal, mapping_impl_literal) tcs);
+
+fun replay_relation cto tao sa r ax p =
+  replay_tables
+    (of_alist (ccompare_literal, equal_literal, mapping_impl_literal) cto)
+    (of_alist (ccompare_literal, equal_literal, mapping_impl_literal) tao) r
+    (field (ceq_literal, ccompare_literal, set_impl_literal) r)
+    (mapped_tcs (snd sa)) ax p;
+
+fun exereplay (ExeTheory (ExeSignature (cto, tao, sa), ax)) p =
+  replay_relation cto tao sa
+    (set (ceq_prod ceq_literal ceq_literal,
+           ccompare_prod ccompare_literal ccompare_literal,
+           set_impl_prod set_impl_literal set_impl_literal)
+      (fst sa))
+    ax p;
 
 val eq_reflexive_ax : term =
   App (App (Ct ("Pure.eq",
@@ -3316,134 +3356,44 @@ val eq_symmetric_ax : term =
                         set_empty (ceq_literal, ccompare_literal)
                           (of_phantom set_impl_literala)))));
 
-fun productc (A1_, A2_, A3_) (B1_, B2_, B3_) (RBT_set rbt1) (RBT_set rbt2) =
-  (case ccompare A2_
-    of NONE =>
-      (raise Fail "product RBT_set RBT_set: ccompare1 = None")
-        (fn _ =>
-          productc (A1_, A2_, A3_) (B1_, B2_, B3_) (RBT_set rbt1)
-            (RBT_set rbt2))
-    | SOME _ =>
-      (case ccompare B2_
-        of NONE =>
-          (raise Fail "product RBT_set RBT_set: ccompare2 = None")
-            (fn _ =>
-              productc (A1_, A2_, A3_) (B1_, B2_, B3_) (RBT_set rbt1)
-                (RBT_set rbt2))
-        | SOME _ => RBT_set (producta A2_ B2_ rbt1 rbt2)))
-  | productc (A1_, A2_, A3_) (B1_, B2_, B3_) a2 (RBT_set rbt2) =
-    (case ccompare B2_
-      of NONE =>
-        (raise Fail "product RBT_set: ccompare2 = None")
-          (fn _ => productc (A1_, A2_, A3_) (B1_, B2_, B3_) a2 (RBT_set rbt2))
-      | SOME _ =>
-        foldb B2_
-          (fn y =>
-            sup_seta (ceq_prod A1_ B1_, ccompare_prod A2_ B2_)
-              (image (A1_, A2_)
-                (ceq_prod A1_ B1_, ccompare_prod A2_ B2_, set_impl_prod A3_ B3_)
-                (fn x => (x, y)) a2))
-          rbt2
-          (bot_set
-            (ceq_prod A1_ B1_, ccompare_prod A2_ B2_, set_impl_prod A3_ B3_)))
-  | productc (A1_, A2_, A3_) (B1_, B2_, B3_) (RBT_set rbt1) b2 =
-    (case ccompare A2_
-      of NONE =>
-        (raise Fail "product RBT_set: ccompare1 = None")
-          (fn _ => productc (A1_, A2_, A3_) (B1_, B2_, B3_) (RBT_set rbt1) b2)
-      | SOME _ =>
-        foldb A2_
-          (fn x =>
-            sup_seta (ceq_prod A1_ B1_, ccompare_prod A2_ B2_)
-              (image (B1_, B2_)
-                (ceq_prod A1_ B1_, ccompare_prod A2_ B2_, set_impl_prod A3_ B3_)
-                (fn a => (x, a)) b2))
-          rbt1
-          (bot_set
-            (ceq_prod A1_ B1_, ccompare_prod A2_ B2_, set_impl_prod A3_ B3_)))
-  | productc (A1_, A2_, A3_) (B1_, B2_, B3_) (DList_set dxs) (DList_set dys) =
-    (case ceq A1_
-      of NONE =>
-        (raise Fail "product DList_set DList_set: ceq1 = None")
-          (fn _ =>
-            productc (A1_, A2_, A3_) (B1_, B2_, B3_) (DList_set dxs)
-              (DList_set dys))
-      | SOME _ =>
-        (case ceq B1_
-          of NONE =>
-            (raise Fail "product DList_set DList_set: ceq2 = None")
-              (fn _ =>
-                productc (A1_, A2_, A3_) (B1_, B2_, B3_) (DList_set dxs)
-                  (DList_set dys))
-          | SOME _ => DList_set (productb A1_ B1_ dxs dys)))
-  | productc (A1_, A2_, A3_) (B1_, B2_, B3_) a1 (DList_set dys) =
-    (case ceq B1_
-      of NONE =>
-        (raise Fail "product DList_set2: ceq = None")
-          (fn _ => productc (A1_, A2_, A3_) (B1_, B2_, B3_) a1 (DList_set dys))
-      | SOME _ =>
-        foldc B1_
-          (fn y =>
-            sup_seta (ceq_prod A1_ B1_, ccompare_prod A2_ B2_)
-              (image (A1_, A2_)
-                (ceq_prod A1_ B1_, ccompare_prod A2_ B2_, set_impl_prod A3_ B3_)
-                (fn x => (x, y)) a1))
-          dys (bot_set
-                (ceq_prod A1_ B1_, ccompare_prod A2_ B2_,
-                  set_impl_prod A3_ B3_)))
-  | productc (A1_, A2_, A3_) (B1_, B2_, B3_) (DList_set dxs) b1 =
-    (case ceq A1_
-      of NONE =>
-        (raise Fail "product DList_set1: ceq = None")
-          (fn _ => productc (A1_, A2_, A3_) (B1_, B2_, B3_) (DList_set dxs) b1)
-      | SOME _ =>
-        foldc A1_
-          (fn x =>
-            sup_seta (ceq_prod A1_ B1_, ccompare_prod A2_ B2_)
-              (image (B1_, B2_)
-                (ceq_prod A1_ B1_, ccompare_prod A2_ B2_, set_impl_prod A3_ B3_)
-                (fn a => (x, a)) b1))
-          dxs (bot_set
-                (ceq_prod A1_ B1_, ccompare_prod A2_ B2_,
-                  set_impl_prod A3_ B3_)))
-  | productc (A1_, A2_, A3_) (B1_, B2_, B3_) (Set_Monad xs) (Set_Monad ys) =
-    Set_Monad (fold (fn x => fold (fn y => (fn a => (x, y) :: a)) ys) xs [])
-  | productc (A1_, A2_, A3_) (B1_, B2_, B3_) a b =
-    Collect_set
-      (fn (x, y) => member (A1_, A2_) x a andalso member (B1_, B2_) y b);
+fun trans_successors (A1_, A2_, A3_, A4_, A5_) m cs =
+  list_all
+    (fn (x, y) =>
+      less_eq_set (A1_, A2_, A3_)
+        (the_default (bot_set (A2_, A3_, A5_)) (lookupa (A3_, A4_) m y))
+        (the_default (bot_set (A2_, A3_, A5_)) (lookupa (A3_, A4_) m x)))
+    cs;
 
-fun exe_antisym A_ [] = true
-  | exe_antisym A_ ((x, y) :: r) =
-    (if membera (equal_prod A_ A_) r (y, x) then eq A_ x y else true) andalso
-      exe_antisym A_ r;
+fun successor_map (A1_, A2_, A3_, A4_, A5_) [] = emptya (A2_, A4_)
+  | successor_map (A1_, A2_, A3_, A4_, A5_) ((x, y) :: cs) =
+    let
+      val m = successor_map (A1_, A2_, A3_, A4_, A5_) cs;
+    in
+      updateb (A2_, A3_) x
+        (insert (A1_, A2_) y
+          (the_default (bot_set (A1_, A2_, A5_)) (lookupa (A2_, A3_) m x)))
+        m
+    end;
 
-fun exe_wf_subclass (A1_, A2_, A3_, A4_, A5_) cs =
-  less_eq_set (cenum_prod A1_ A1_, ceq_prod A2_ A2_, ccompare_prod A3_ A3_)
-    (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A5_ A5_) cs)
-    (productc (A2_, A3_, A5_) (A2_, A3_, A5_)
-      (field (A2_, A3_, A5_)
-        (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A5_ A5_)
-          cs))
-      (field (A2_, A3_, A5_)
-        (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A5_ A5_)
-          cs))) andalso
-    (trans_on (A2_, A3_, A4_) (top_set (A2_, A3_, A5_))
-       (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A5_ A5_)
-         cs) andalso
-      (exe_antisym A4_ cs andalso
-        refl_on (A2_, A3_)
-          (field (A2_, A3_, A5_)
-            (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_,
-                   set_impl_prod A5_ A5_)
-              cs))
-          (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A5_ A5_)
-            cs)));
+fun subclass_sets (A1_, A2_, A3_, A4_, A5_, A6_) cs r =
+  trans_successors (A1_, A2_, A3_, A4_, A6_)
+    (successor_map (A2_, A3_, A4_, A5_, A6_) cs) cs andalso
+    (ball (ceq_prod A2_ A2_, ccompare_prod A3_ A3_) r
+       (fn (x, y) =>
+         (if member (ceq_prod A2_ A2_, ccompare_prod A3_ A3_) (y, x) r
+           then eq A4_ x y else true)) andalso
+      ball (A2_, A3_) (field (A2_, A3_, A6_) r)
+        (fn x => member (ceq_prod A2_ A2_, ccompare_prod A3_ A3_) (x, x) r));
+
+fun exe_wf_subclass (A1_, A2_, A3_, A4_, A5_, A6_) cs =
+  subclass_sets (A1_, A2_, A3_, A4_, A5_, A6_) cs
+    (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A6_ A6_) cs);
 
 fun exe_class_conds cs = distinct (equal_prod equal_literal equal_literal) cs;
 
 fun exe_ars_condsa (A1_, A2_, A3_, A4_, A5_) (B1_, B2_, B3_, B4_) (C1_, C2_)
   arss =
-  distinct A3_ (map fst arss) andalso
+  distinct A3_ (mapa fst arss) andalso
     ball (ceq_list (ceq_prod B1_ (ceq_list C1_)),
            ccompare_list (ccompare_prod B2_ (ccompare_list C2_)))
       (image
@@ -3457,7 +3407,7 @@ fun exe_ars_condsa (A1_, A2_, A3_, A4_, A5_) (B1_, B2_, B3_, B4_) (C1_, C2_)
                      (ccompare_list (ccompare_prod B2_ (ccompare_list C2_))),
                    set_impl_prod A5_ set_impl_list)
               arss))
-      (fn ars => distinct B3_ (map fst ars));
+      (fn ars => distinct B3_ (mapa fst ars));
 
 fun exe_ars_conds arss =
   exe_ars_condsa
@@ -3473,24 +3423,6 @@ fun exe_ars_conds arss =
     arss;
 
 fun exe_osig_conds a = exe_class_conds (fst a) andalso exe_ars_conds (snd a);
-
-fun wf_sort_set r f s =
-  set_eq (cenum_literal, ceq_literal, ccompare_literal)
-    (filter (ceq_literal, ccompare_literal)
-      (fn c =>
-        not (bex (ceq_literal, ccompare_literal) s
-              (fn d =>
-                member
-                  (ceq_prod ceq_literal ceq_literal,
-                    ccompare_prod ccompare_literal ccompare_literal)
-                  (d, c) r andalso
-                  not (member
-                        (ceq_prod ceq_literal ceq_literal,
-                          ccompare_prod ccompare_literal ccompare_literal)
-                        (c, d) r))))
-      s)
-    s andalso
-    less_eq_set (cenum_literal, ceq_literal, ccompare_literal) s f;
 
 fun all_sorts_sets (A1_, A2_, A3_) (B1_, B2_, B3_) r f arss =
   ball (ceq_list
@@ -3651,8 +3583,8 @@ fun coregular_rows r ars ks =
             then list_all2
                    (sort_leq (ceq_literal, ccompare_literal)
                      (ceq_literal, ccompare_literal) r)
-                   (the (lookupa (fn x => ((x : string) = c1)) ars))
-                   (the (lookupa (fn x => ((x : string) = c2)) ars))
+                   (the (lookupc (fn x => ((x : string) = c1)) ars))
+                   (the (lookupc (fn x => ((x : string) = c2)) ars))
             else true)));
 
 fun coregular_arity r ars =
@@ -3807,21 +3739,18 @@ fun exe_wf_tcsigs (A1_, A2_, A3_) cs arss =
 fun exe_wf_osig oss =
   exe_wf_subclass
     (cenum_literal, ceq_literal, ccompare_literal, equal_literal,
-      set_impl_literal)
+      mapping_impl_literal, set_impl_literal)
     (fst oss) andalso
     (exe_wf_tcsigs (ceq_literal, ccompare_literal, set_impl_literal) (fst oss)
        (snd oss) andalso
       exe_osig_conds oss);
 
-fun typ_ok_prepared arities r f (Ty (c, ts)) =
-  (case lookupa (fn k => ((k : string) = c)) arities of NONE => false
-    | SOME ar =>
-      equal_nata (size_list ts) ar andalso
-        list_all (typ_ok_prepared arities r f) ts)
-  | typ_ok_prepared arities r f (Tv (v, s)) = wf_sort_set r f s;
-
 fun const_types_ok arities r f cto =
-  list_all (fn (_, a) => typ_ok_prepared arities r f a) cto;
+  list_all
+    (typ_ok_mapped
+      (of_alist (ccompare_literal, equal_literal, mapping_impl_literal) arities)
+      r f)
+    (mapa snd cto);
 
 fun const_types_relation arities r cto =
   const_types_ok arities r
@@ -3946,9 +3875,9 @@ fun exe_wf_sig (ExeSignature (cto, tao, sa)) =
                                 (finite_UNIV_literal, ceq_literal,
                                   cproper_interval_literal, set_impl_literal))),
                           set_impl_prod set_impl_literal set_impl_list)
-                     (the (lookupa (fn k => ((k : string) = typea)) (snd sa)))))
+                     (the (lookupc (fn k => ((k : string) = typea)) (snd sa)))))
              (fn ars =>
-               equal_nata (the (lookupa (fn k => ((k : string) = typea)) tao))
+               equal_nata (the (lookupc (fn k => ((k : string) = typea)) tao))
                  (size_list ars))) andalso
         const_types_relation tao
           (set (ceq_prod ceq_literal ceq_literal,
@@ -4032,6 +3961,12 @@ set_empty (ceq_literal, ccompare_literal) (of_phantom set_impl_literala)))),
                          Tv (Var ("'a", zero_int),
                               set_empty (ceq_literal, ccompare_literal)
                                 (of_phantom set_impl_literala))))));
+
+fun execlass_les A_ cs c1 c2 =
+  membera (equal_prod A_ A_) cs (c1, c2) andalso
+    not (membera (equal_prod A_ A_) cs (c2, c1));
+
+fun eq_term t1 t2 = equal_terma t1 t2;
 
 val eq_combination_ax : term =
   App (App (Ct ("Pure.imp",
@@ -4151,10 +4086,29 @@ set_empty (ceq_literal, ccompare_literal) (of_phantom set_impl_literala)))),
                                     set_empty (ceq_literal, ccompare_literal)
                                       (of_phantom set_impl_literala)))))));
 
+fun execonst_type_of (ExeSignature (x1, x2, x3)) = x1;
+
+fun exetyp_arity_of (ExeSignature (x1, x2, x3)) = x2;
+
+fun exesorts (ExeSignature (x1, x2, x3)) = x3;
+
 fun exe_sig_conds sigma =
-  distinct equal_literal (map fst (execonst_type_of sigma)) andalso
-    (distinct equal_literal (map fst (exetyp_arity_of sigma)) andalso
+  distinct equal_literal (mapa fst (execonst_type_of sigma)) andalso
+    (distinct equal_literal (mapa fst (exetyp_arity_of sigma)) andalso
       exe_osig_conds (exesorts sigma));
+
+fun axiom_terms_mapped consts arities r f ax =
+  list_all
+    (fn p =>
+      term_ok_mapped consts arities r f p andalso
+        equal_option equal_typ (typ_of p) (SOME (Ty ("prop", []))))
+    ax;
+
+fun axiom_terms_relation cto tao r ax =
+  axiom_terms_mapped
+    (of_alist (ccompare_literal, equal_literal, mapping_impl_literal) cto)
+    (of_alist (ccompare_literal, equal_literal, mapping_impl_literal) tao) r
+    (field (ceq_literal, ccompare_literal, set_impl_literal) r) ax;
 
 val eq_abstract_rule_ax : term =
   App (App (Ct ("Pure.imp",
@@ -4252,15 +4206,20 @@ Ty ("fun",
   set_empty (ceq_literal, ccompare_literal) (of_phantom set_impl_literala))])),
                           Bv zero_nat))));
 
+fun required_eq_axioms ax =
+  list_all (membera equal_term ax)
+    [eq_reflexive_ax, eq_symmetric_ax, eq_transitive_ax, eq_intr_ax, eq_elim_ax,
+      eq_combination_ax, eq_abstract_rule_ax];
+
 fun exeis_std_sig (ExeSignature (cto, tao, sorts)) =
-  equal_option equal_nat (lookupa (fn k => ((k : string) = "fun")) tao)
+  equal_option equal_nat (lookupc (fn k => ((k : string) = "fun")) tao)
     (SOME (nat_of_integer (2 : IntInf.int))) andalso
-    (equal_option equal_nat (lookupa (fn k => ((k : string) = "prop")) tao)
+    (equal_option equal_nat (lookupc (fn k => ((k : string) = "prop")) tao)
        (SOME zero_nat) andalso
-      (equal_option equal_nat (lookupa (fn k => ((k : string) = "itself")) tao)
+      (equal_option equal_nat (lookupc (fn k => ((k : string) = "itself")) tao)
          (SOME one_nat) andalso
         (equal_option equal_typ
-           (lookupa (fn k => ((k : string) = "Pure.eq")) cto)
+           (lookupc (fn k => ((k : string) = "Pure.eq")) cto)
            (SOME (Ty ("fun",
                        [Tv (Var ("'a", zero_int),
                              set_empty (ceq_literal, ccompare_literal)
@@ -4271,7 +4230,7 @@ fun exeis_std_sig (ExeSignature (cto, tao, sorts)) =
                                       (of_phantom set_impl_literala)),
                                 Ty ("prop", [])])]))) andalso
           (equal_option equal_typ
-             (lookupa (fn k => ((k : string) = "Pure.all")) cto)
+             (lookupc (fn k => ((k : string) = "Pure.all")) cto)
              (SOME (Ty ("fun",
                          [Ty ("fun",
                                [Tv (Var ("'a", zero_int),
@@ -4280,48 +4239,36 @@ fun exeis_std_sig (ExeSignature (cto, tao, sorts)) =
                                  Ty ("prop", [])]),
                            Ty ("prop", [])]))) andalso
             (equal_option equal_typ
-               (lookupa (fn k => ((k : string) = "Pure.imp")) cto)
+               (lookupc (fn k => ((k : string) = "Pure.imp")) cto)
                (SOME (Ty ("fun",
                            [Ty ("prop", []),
                              Ty ("fun",
                                   [Ty ("prop", []),
                                     Ty ("prop", [])])]))) andalso
               equal_option equal_typ
-                (lookupa (fn k => ((k : string) = "Pure.type")) cto)
+                (lookupc (fn k => ((k : string) = "Pure.type")) cto)
                 (SOME (Ty ("itself",
                             [Tv (Var ("'a", zero_int),
                                   set_empty (ceq_literal, ccompare_literal)
                                     (of_phantom set_impl_literala))]))))))));
 
-fun exe_wf_theorya (ExeTheory (ExeSignature (cto, tao, sa), ax)) =
+fun exe_wf_theory (ExeTheory (ExeSignature (cto, tao, sa), ax)) =
   exe_sig_conds (ExeSignature (cto, tao, sa)) andalso
-    (list_all
-       (fn p =>
-         exeterm_oka (ExeSignature (cto, tao, sa)) p andalso
-           equal_option equal_typ (typ_of p) (SOME (Ty ("prop", []))))
+    (axiom_terms_relation cto tao
+       (set (ceq_prod ceq_literal ceq_literal,
+              ccompare_prod ccompare_literal ccompare_literal,
+              set_impl_prod set_impl_literal set_impl_literal)
+         (fst sa))
        ax andalso
       (exeis_std_sig (ExeSignature (cto, tao, sa)) andalso
         (exe_wf_sig (ExeSignature (cto, tao, sa)) andalso
-          less_eq_set (cenum_term, ceq_term, ccompare_term)
-            (insert (ceq_term, ccompare_term) eq_reflexive_ax
-              (insert (ceq_term, ccompare_term) eq_symmetric_ax
-                (insert (ceq_term, ccompare_term) eq_transitive_ax
-                  (insert (ceq_term, ccompare_term) eq_intr_ax
-                    (insert (ceq_term, ccompare_term) eq_elim_ax
-                      (insert (ceq_term, ccompare_term) eq_combination_ax
-                        (insert (ceq_term, ccompare_term) eq_abstract_rule_ax
-                          (set_empty (ceq_term, ccompare_term)
-                            (of_phantom set_impl_terma)))))))))
-            (set (ceq_term, ccompare_term, set_impl_term) ax))));
+          required_eq_axioms ax)));
 
-fun exe_wf_theory theta = exe_wf_theorya theta;
-
-fun int n = Int_of_integer n;
-
-fun nat n = nat_of_integer n;
-
-fun sort xs = set (ceq_literal, ccompare_literal, set_impl_literal) xs;
-
-fun eq_term t1 t2 = equal_terma t1 t2;
+fun exenormalize_sort cs s =
+  filter (ceq_literal, ccompare_literal)
+    (fn c =>
+      not (bex (ceq_literal, ccompare_literal) s
+            (fn ca => execlass_les equal_literal cs ca c)))
+    s;
 
 end; (*struct ExportCheck*)
