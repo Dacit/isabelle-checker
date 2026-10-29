@@ -36,10 +36,14 @@ fun check_thmss trusted (checked0, seen0) thmss cthy =
           case Checker.check cthy cthms thm prf of
             SOME cthm => cthm 
           | NONE => error ("Incorrect proof term for " ^ name)
+      in (name, cthm) end
+
+    fun check_thm thm_name thm =
+      let
+        val (name, cthm) = check_proof (Thm_Name.print thm_name) (Checker.thm cthy thm)
         val _ = writeln ("Checked " ^ name)
       in (name, cthm) end
 
-    fun check_thm thm_name thm = check_proof (Thm_Name.print thm_name) (Checker.thm cthy thm)
     fun check_thms (name, thms) = map_index (fn (i, thm) => check_thm (name, i) thm) thms
     val checked = maps check_thms thmss
 
@@ -53,8 +57,7 @@ fun check_current thy =
       Theory.ancestors_of thy |> map (rpair () o Context.theory_long_name) |> Symtab.make
     val parent_facts = Theory.parents_of thy |> map Global_Theory.facts_of
     val thmss = Global_Theory.facts_of thy |> Facts.dest_static true parent_facts
-    val (checked, _) = check_thmss trusted ([], Inttab.empty) thmss (check_thy thy)
-  in checked |> map fst |> filter_out (equal "") end
+  in check_thmss trusted ([], Inttab.empty) thmss (check_thy thy) end
 
 val _ =
   Outer_Syntax.command \<^command_keyword>\<open>check_theory\<close> "check proof terms"
@@ -62,35 +65,64 @@ val _ =
       (Toplevel.keep (fn st =>
         let
           val thy = Toplevel.theory_of st
-          val num = length (check_current thy)
-        in writeln ("Checked " ^ (string_of_int num) ^ " thms") end)))
+          val (checked, seen) = check_current thy
+          val msg =
+            "Checked " ^ (checked |> length |> string_of_int) ^ " thms with " ^ 
+              (seen |> Inttab.size |> string_of_int) ^ " intermediate thms"
+        in writeln msg end)))
 
-fun check_theory theory_name trusted_theories =
+fun check_theory trusted_theories (theory_name, result0) =
   let
-    val trusted = Symtab.make trusted_theories
+    val trusted = Symtab.make (map (rpair ()) trusted_theories)
     fun check_segment (st, ((prev_thys, prev_cthy), results0)) =
       let 
         val thy = Toplevel.theory_of st
-        val cthy = case Checker.cthy_map prev_cthy thy of SOME cthy => cthy | NONE => check_thy thy
         val thmss =
           Facts.dest_static true (map Global_Theory.facts_of prev_thys) (Global_Theory.facts_of thy)
-        val result1 = if null thmss then results0 else check_thmss trusted results0 thmss cthy
-      in (([thy], SOME cthy), result1) end
-
-    val init = ([], Inttab.empty)
+      in 
+        if null thmss then (([thy], prev_cthy), results0)
+        else
+          let
+            val cthy =
+              case Checker.cthy_map prev_cthy thy of SOME cthy => cthy | NONE => check_thy thy
+          in (([thy], SOME cthy), check_thmss trusted results0 thmss cthy) end
+      end
 
     fun check_states states =
-      if null states then (([], NONE), init)
+      if null states then (([], NONE), result0)
       else
         let
           val thy = Toplevel.theory_of (hd states)
           val parents = Theory.parents_of thy
-        in List.foldl check_segment ((parents, Checker.cthy thy), init) states end
+        in List.foldl check_segment ((parents, Checker.cthy thy), result0) states end
 
     val states = Build.get_theory_segments theory_name |> map #state |> filter Toplevel.is_theory
-    val (_, (checked, seen)) = check_states states
-    val checked1 = Inttab.dest seen |> map (fst o snd) |> filter_out (equal "")
-  in map fst checked @ checked1 end
+  in snd (check_states states) end
+
+fun check_theories trusted_theories theory_names =
+  List.foldl (check_theory trusted_theories) ([], Inttab.empty) theory_names
+
+fun check_build args =
+  if args = "" then ()
+  else
+    let
+      fun decode_args args =
+      let
+        open XML.Decode
+        val (theories, trusted) = pair (list string) (list string) (YXML.parse_body args)
+      in (theories, trusted) end
+
+      fun encode_result res =
+        let open XML.Encode
+        in list string res end
+
+      val (theory_names, trusted_theories) = decode_args args
+      val (checked, _) = check_theories trusted_theories theory_names
+      val res = map fst checked
+    in Output.protocol_message [Markup.function "check_session_finished"] [encode_result res] end
+
+val _ =
+  check_build (getenv "ISABELLE_CHECKER_ARGS")
 \<close>
 
 end
