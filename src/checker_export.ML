@@ -1889,8 +1889,20 @@ val set_impl_literal = {set_impl = set_impl_literala} : string set_impl;
 
 val finite_UNIV_literala : (string, bool) phantom = Phantom false;
 
+val card_UNIV_literala : (string, nat) phantom = Phantom zero_nat;
+
+type 'a card_UNIV =
+  {finite_UNIV_card_UNIV : 'a finite_UNIV, card_UNIV : ('a, nat) phantom};
+val finite_UNIV_card_UNIV = #finite_UNIV_card_UNIV :
+  'a card_UNIV -> 'a finite_UNIV;
+val card_UNIV = #card_UNIV : 'a card_UNIV -> ('a, nat) phantom;
+
 val finite_UNIV_literal = {finite_UNIV = finite_UNIV_literala} :
   string finite_UNIV;
+
+val card_UNIV_literal =
+  {finite_UNIV_card_UNIV = finite_UNIV_literal, card_UNIV = card_UNIV_literala}
+  : string card_UNIV;
 
 datatype mapping_impla = Mapping_Choose | Mapping_Assoc_List | Mapping_RBT |
   Mapping_Mapping;
@@ -1937,6 +1949,23 @@ fun set_impl_proda A_ B_ =
 fun set_impl_prod A_ B_ = {set_impl = set_impl_proda A_ B_} :
   ('a * 'b) set_impl;
 
+fun finite_UNIV_proda A_ B_ =
+  Phantom (of_phantom (finite_UNIV A_) andalso of_phantom (finite_UNIV B_));
+
+fun times_nat m n = Nat (IntInf.* (integer_of_nat m, integer_of_nat n));
+
+fun card_UNIV_proda A_ B_ =
+  Phantom (times_nat (of_phantom (card_UNIV A_)) (of_phantom (card_UNIV B_)));
+
+fun finite_UNIV_prod A_ B_ = {finite_UNIV = finite_UNIV_proda A_ B_} :
+  ('a * 'b) finite_UNIV;
+
+fun card_UNIV_prod A_ B_ =
+  {finite_UNIV_card_UNIV =
+     finite_UNIV_prod (finite_UNIV_card_UNIV A_) (finite_UNIV_card_UNIV B_),
+    card_UNIV = card_UNIV_proda A_ B_}
+  : ('a * 'b) card_UNIV;
+
 fun mapa f [] = []
   | mapa f (x21 :: x22) = f x21 :: mapa f x22;
 
@@ -1954,12 +1983,6 @@ fun cEnum_prod A_ B_ =
                      enum_ex_a (fn x => enum_ex_b (fn y => p (x, y))))))));
 
 fun cenum_prod A_ B_ = {cEnum = cEnum_prod A_ B_} : ('a * 'b) cenum;
-
-fun finite_UNIV_proda A_ B_ =
-  Phantom (of_phantom (finite_UNIV A_) andalso of_phantom (finite_UNIV B_));
-
-fun finite_UNIV_prod A_ B_ = {finite_UNIV = finite_UNIV_proda A_ B_} :
-  ('a * 'b) finite_UNIV;
 
 fun ccompare_proda A_ B_ =
   (case ccompare A_ of NONE => NONE
@@ -2744,6 +2767,42 @@ val eq_intr_ax : term =
                          Fv (Var ("A", zero_int), Ty ("prop", []))),
                     Fv (Var ("B", zero_int), Ty ("prop", [])))));
 
+fun list_remdups equal [] = []
+  | list_remdups equal (x :: xs) =
+    (if list_member equal xs x then list_remdups equal xs
+      else x :: list_remdups equal xs);
+
+fun length A_ xa = size_list (list_of_dlist A_ xa);
+
+fun card (A1_, A2_, A3_) (Complement a) =
+  let
+    val aa = card (A1_, A2_, A3_) a;
+    val s = of_phantom (card_UNIV A1_);
+  in
+    (if less_nat zero_nat s then minus_nat s aa
+      else (if finite (finite_UNIV_card_UNIV A1_, A2_, A3_) a then zero_nat
+             else (raise Fail "card Complement: infinite")
+                    (fn _ => card (A1_, A2_, A3_) (Complement a))))
+  end
+  | card (A1_, A2_, A3_) (Set_Monad xs) =
+    (case ceq A2_
+      of NONE =>
+        (raise Fail "card Set_Monad: ceq = None")
+          (fn _ => card (A1_, A2_, A3_) (Set_Monad xs))
+      | SOME eq => size_list (list_remdups eq xs))
+  | card (A1_, A2_, A3_) (RBT_set rbt) =
+    (case ccompare A3_
+      of NONE =>
+        (raise Fail "card RBT_set: ccompare = None")
+          (fn _ => card (A1_, A2_, A3_) (RBT_set rbt))
+      | SOME _ => size_list (keysa A3_ rbt))
+  | card (A1_, A2_, A3_) (DList_set dxs) =
+    (case ceq A2_
+      of NONE =>
+        (raise Fail "card DList_set: ceq = None")
+          (fn _ => card (A1_, A2_, A3_) (DList_set dxs))
+      | SOME _ => length A2_ dxs);
+
 fun semilattice_set_apply (Abs_semilattice_set x) = x;
 
 fun is_empty A_ xa =
@@ -3392,189 +3451,58 @@ fun exe_wf_subclass (A1_, A2_, A3_, A4_, A5_, A6_) cs =
   subclass_sets (A1_, A2_, A3_, A4_, A5_, A6_) cs
     (set (ceq_prod A2_ A2_, ccompare_prod A3_ A3_, set_impl_prod A6_ A6_) cs);
 
-fun exe_class_conds cs = distinct (equal_prod equal_literal equal_literal) cs;
-
-fun exe_ars_condsa (A1_, A2_, A3_, A4_, A5_) (B1_, B2_, B3_, B4_) (C1_, C2_)
-  arss =
-  distinct A3_ (mapa fst arss) andalso
-    ball (ceq_list (ceq_prod B1_ (ceq_list C1_)),
-           ccompare_list (ccompare_prod B2_ (ccompare_list C2_)))
-      (image
-        (ceq_prod A1_ (ceq_list (ceq_prod B1_ (ceq_list C1_))),
-          ccompare_prod A2_
-            (ccompare_list (ccompare_prod B2_ (ccompare_list C2_))))
-        (ceq_list (ceq_prod B1_ (ceq_list C1_)),
-          ccompare_list (ccompare_prod B2_ (ccompare_list C2_)), set_impl_list)
-        snd (set (ceq_prod A1_ (ceq_list (ceq_prod B1_ (ceq_list C1_))),
-                   ccompare_prod A2_
-                     (ccompare_list (ccompare_prod B2_ (ccompare_list C2_))),
-                   set_impl_prod A5_ set_impl_list)
-              arss))
-      (fn ars => distinct B3_ (mapa fst ars));
+fun exe_class_conds cs =
+  equal_nata
+    (card (card_UNIV_prod card_UNIV_literal card_UNIV_literal,
+            ceq_prod ceq_literal ceq_literal,
+            ccompare_prod ccompare_literal ccompare_literal)
+      (set (ceq_prod ceq_literal ceq_literal,
+             ccompare_prod ccompare_literal ccompare_literal,
+             set_impl_prod set_impl_literal set_impl_literal)
+        cs))
+    (size_list cs);
 
 fun exe_ars_conds arss =
-  exe_ars_condsa
-    (ceq_literal, ccompare_literal, equal_literal, linorder_literal,
-      set_impl_literal)
-    (ceq_literal, ccompare_literal, equal_literal, linorder_literal)
-    (ceq_set
-       (cenum_literal, ceq_literal,
-         ccompare_cproper_interval cproper_interval_literal),
-      ccompare_set
-        (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-          set_impl_literal))
-    arss;
+  equal_nata
+    (card (card_UNIV_literal, ceq_literal, ccompare_literal)
+      (set (ceq_literal, ccompare_literal, set_impl_literal) (mapa fst arss)))
+    (size_list arss) andalso
+    list_all
+      (fn (_, ars) =>
+        equal_nata
+          (card (card_UNIV_literal, ceq_literal, ccompare_literal)
+            (set (ceq_literal, ccompare_literal, set_impl_literal)
+              (mapa fst ars)))
+          (size_list ars))
+      arss;
 
 fun exe_osig_conds a = exe_class_conds (fst a) andalso exe_ars_conds (snd a);
 
-fun all_sorts_sets (A1_, A2_, A3_) (B1_, B2_, B3_) r f arss =
-  ball (ceq_list
-          (ceq_prod B1_
-            (ceq_list
-              (ceq_set
-                (cenum_literal, ceq_literal,
-                  ccompare_cproper_interval cproper_interval_literal)))),
-         ccompare_list
-           (ccompare_prod B2_
-             (ccompare_list
-               (ccompare_set
-                 (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                   set_impl_literal)))))
-    (image
-      (ceq_prod A1_
-         (ceq_list
-           (ceq_prod B1_
-             (ceq_list
-               (ceq_set
-                 (cenum_literal, ceq_literal,
-                   ccompare_cproper_interval cproper_interval_literal))))),
-        ccompare_prod A2_
-          (ccompare_list
-            (ccompare_prod B2_
-              (ccompare_list
-                (ccompare_set
-                  (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                    set_impl_literal))))))
-      (ceq_list
-         (ceq_prod B1_
-           (ceq_list
-             (ceq_set
-               (cenum_literal, ceq_literal,
-                 ccompare_cproper_interval cproper_interval_literal)))),
-        ccompare_list
-          (ccompare_prod B2_
-            (ccompare_list
-              (ccompare_set
-                (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                  set_impl_literal)))),
-        set_impl_list)
-      snd (set (ceq_prod A1_
-                  (ceq_list
-                    (ceq_prod B1_
-                      (ceq_list
-                        (ceq_set
-                          (cenum_literal, ceq_literal,
-                            ccompare_cproper_interval
-                              cproper_interval_literal))))),
-                 ccompare_prod A2_
-                   (ccompare_list
-                     (ccompare_prod B2_
-                       (ccompare_list
-                         (ccompare_set
-                           (finite_UNIV_literal, ceq_literal,
-                             cproper_interval_literal, set_impl_literal))))),
-                 set_impl_prod A3_ set_impl_list)
-            arss))
-    (fn ars =>
-      ball (ceq_list
-              (ceq_set
-                (cenum_literal, ceq_literal,
-                  ccompare_cproper_interval cproper_interval_literal)),
-             ccompare_list
-               (ccompare_set
-                 (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                   set_impl_literal)))
-        (image
-          (ceq_prod B1_
-             (ceq_list
-               (ceq_set
-                 (cenum_literal, ceq_literal,
-                   ccompare_cproper_interval cproper_interval_literal))),
-            ccompare_prod B2_
-              (ccompare_list
-                (ccompare_set
-                  (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                    set_impl_literal))))
-          (ceq_list
-             (ceq_set
-               (cenum_literal, ceq_literal,
-                 ccompare_cproper_interval cproper_interval_literal)),
-            ccompare_list
-              (ccompare_set
-                (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                  set_impl_literal)),
-            set_impl_list)
-          snd (set (ceq_prod B1_
-                      (ceq_list
-                        (ceq_set
-                          (cenum_literal, ceq_literal,
-                            ccompare_cproper_interval
-                              cproper_interval_literal))),
-                     ccompare_prod B2_
-                       (ccompare_list
-                         (ccompare_set
-                           (finite_UNIV_literal, ceq_literal,
-                             cproper_interval_literal, set_impl_literal))),
-                     set_impl_prod B3_ set_impl_list)
-                ars))
-        (list_all (wf_sort_set r f)));
+fun all_sorts_sets r f arss =
+  list_all
+    (fn (_, a) => list_all (fn (_, aa) => list_all (wf_sort_set r f) aa) a)
+    arss;
 
-fun all_sorts_relation (A1_, A2_, A3_) (B1_, B2_, B3_) r arss =
-  all_sorts_sets (A1_, A2_, A3_) (B1_, B2_, B3_) r
-    (field (ceq_literal, ccompare_literal, set_impl_literal) r) arss;
+fun all_sorts_relation r arss =
+  all_sorts_sets r (field (ceq_literal, ccompare_literal, set_impl_literal) r)
+    arss;
 
-fun exe_all_normalized_and_ex_tcsigs (A1_, A2_, A3_) (B1_, B2_, B3_) cs arss =
-  all_sorts_relation (A1_, A2_, A3_) (B1_, B2_, B3_)
+fun exe_all_normalized_and_ex_tcsigs cs arss =
+  all_sorts_relation
     (set (ceq_prod ceq_literal ceq_literal,
            ccompare_prod ccompare_literal ccompare_literal,
            set_impl_prod set_impl_literal set_impl_literal)
       cs)
     arss;
 
-fun exe_consistent_length_tcsigs (A1_, A2_, A3_) (B1_, B2_, B3_) (C1_, C2_) arss
-  = ball (ceq_list (ceq_prod B1_ (ceq_list C1_)),
-           ccompare_list (ccompare_prod B2_ (ccompare_list C2_)))
-      (image
-        (ceq_prod A1_ (ceq_list (ceq_prod B1_ (ceq_list C1_))),
-          ccompare_prod A2_
-            (ccompare_list (ccompare_prod B2_ (ccompare_list C2_))))
-        (ceq_list (ceq_prod B1_ (ceq_list C1_)),
-          ccompare_list (ccompare_prod B2_ (ccompare_list C2_)), set_impl_list)
-        snd (set (ceq_prod A1_ (ceq_list (ceq_prod B1_ (ceq_list C1_))),
-                   ccompare_prod A2_
-                     (ccompare_list (ccompare_prod B2_ (ccompare_list C2_))),
-                   set_impl_prod A3_ set_impl_list)
-              arss))
-      (fn ars =>
-        ball (ceq_list C1_, ccompare_list C2_)
-          (image
-            (ceq_prod B1_ (ceq_list C1_), ccompare_prod B2_ (ccompare_list C2_))
-            (ceq_list C1_, ccompare_list C2_, set_impl_list) snd
-            (set (ceq_prod B1_ (ceq_list C1_),
-                   ccompare_prod B2_ (ccompare_list C2_),
-                   set_impl_prod B3_ set_impl_list)
-              ars))
-          (fn ss_1 =>
-            ball (ceq_list C1_, ccompare_list C2_)
-              (image
-                (ceq_prod B1_ (ceq_list C1_),
-                  ccompare_prod B2_ (ccompare_list C2_))
-                (ceq_list C1_, ccompare_list C2_, set_impl_list) snd
-                (set (ceq_prod B1_ (ceq_list C1_),
-                       ccompare_prod B2_ (ccompare_list C2_),
-                       set_impl_prod B3_ set_impl_list)
-                  ars))
-              (fn ss_2 => equal_nata (size_list ss_1) (size_list ss_2))));
+fun exe_consistent_length_tcsigs arss =
+  list_all
+    (fn a =>
+      (case a of (_, []) => true
+        | (_, (_, ss) :: rest) =>
+          list_all (fn (_, ssa) => equal_nata (size_list ss) (size_list ssa))
+            rest))
+    arss;
 
 fun coregular_rows r ars ks =
   ball (ceq_literal, ccompare_literal) ks
@@ -3592,93 +3520,12 @@ fun coregular_rows r ars ks =
 
 fun coregular_arity r ars =
   coregular_rows r ars
-    (image
-      (ceq_prod ceq_literal
-         (ceq_list
-           (ceq_set
-             (cenum_literal, ceq_literal,
-               ccompare_cproper_interval cproper_interval_literal))),
-        ccompare_prod ccompare_literal
-          (ccompare_list
-            (ccompare_set
-              (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                set_impl_literal))))
-      (ceq_literal, ccompare_literal, set_impl_literal) fst
-      (set (ceq_prod ceq_literal
-              (ceq_list
-                (ceq_set
-                  (cenum_literal, ceq_literal,
-                    ccompare_cproper_interval cproper_interval_literal))),
-             ccompare_prod ccompare_literal
-               (ccompare_list
-                 (ccompare_set
-                   (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                     set_impl_literal))),
-             set_impl_prod set_impl_literal set_impl_list)
-        ars));
+    (set (ceq_literal, ccompare_literal, set_impl_literal) (mapa fst ars));
 
-fun coregular_set (A1_, A2_, A3_) r arss =
-  ball (ceq_list
-          (ceq_prod ceq_literal
-            (ceq_list
-              (ceq_set
-                (cenum_literal, ceq_literal,
-                  ccompare_cproper_interval cproper_interval_literal)))),
-         ccompare_list
-           (ccompare_prod ccompare_literal
-             (ccompare_list
-               (ccompare_set
-                 (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                   set_impl_literal)))))
-    (image
-      (ceq_prod A1_
-         (ceq_list
-           (ceq_prod ceq_literal
-             (ceq_list
-               (ceq_set
-                 (cenum_literal, ceq_literal,
-                   ccompare_cproper_interval cproper_interval_literal))))),
-        ccompare_prod A2_
-          (ccompare_list
-            (ccompare_prod ccompare_literal
-              (ccompare_list
-                (ccompare_set
-                  (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                    set_impl_literal))))))
-      (ceq_list
-         (ceq_prod ceq_literal
-           (ceq_list
-             (ceq_set
-               (cenum_literal, ceq_literal,
-                 ccompare_cproper_interval cproper_interval_literal)))),
-        ccompare_list
-          (ccompare_prod ccompare_literal
-            (ccompare_list
-              (ccompare_set
-                (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-                  set_impl_literal)))),
-        set_impl_list)
-      snd (set (ceq_prod A1_
-                  (ceq_list
-                    (ceq_prod ceq_literal
-                      (ceq_list
-                        (ceq_set
-                          (cenum_literal, ceq_literal,
-                            ccompare_cproper_interval
-                              cproper_interval_literal))))),
-                 ccompare_prod A2_
-                   (ccompare_list
-                     (ccompare_prod ccompare_literal
-                       (ccompare_list
-                         (ccompare_set
-                           (finite_UNIV_literal, ceq_literal,
-                             cproper_interval_literal, set_impl_literal))))),
-                 set_impl_prod A3_ set_impl_list)
-            arss))
-    (coregular_arity r);
+fun coregular_set r arss = list_all (fn (_, a) => coregular_arity r a) arss;
 
-fun exe_coregular_tcsigs (A1_, A2_, A3_) cs arss =
-  coregular_set (A1_, A2_, A3_)
+fun exe_coregular_tcsigs cs arss =
+  coregular_set
     (set (ceq_prod ceq_literal ceq_literal,
            ccompare_prod ccompare_literal ccompare_literal,
            set_impl_prod set_impl_literal set_impl_literal)
@@ -3691,62 +3538,28 @@ fun complete_keys (A1_, A2_) cs ks =
       (if member (A1_, A2_) c1 ks then member (A1_, A2_) c2 ks else true))
     cs;
 
-fun complete_arity (A1_, A2_, A3_) (B1_, B2_, B3_) cs ars =
-  complete_keys (A1_, A2_) cs
-    (image (ceq_prod A1_ B1_, ccompare_prod A2_ B2_) (A1_, A2_, A3_) fst
-      (set (ceq_prod A1_ B1_, ccompare_prod A2_ B2_, set_impl_prod A3_ B3_)
-        ars));
+fun complete_arity (A1_, A2_, A3_) cs ars =
+  complete_keys (A1_, A2_) cs (set (A1_, A2_, A3_) (mapa fst ars));
 
-fun complete_set (A1_, A2_, A3_) (B1_, B2_, B3_) (C1_, C2_, C3_) cs arss =
-  ball (ceq_list (ceq_prod A1_ C1_), ccompare_list (ccompare_prod A2_ C2_))
-    (image
-      (ceq_prod B1_ (ceq_list (ceq_prod A1_ C1_)),
-        ccompare_prod B2_ (ccompare_list (ccompare_prod A2_ C2_)))
-      (ceq_list (ceq_prod A1_ C1_), ccompare_list (ccompare_prod A2_ C2_),
-        set_impl_list)
-      snd (set (ceq_prod B1_ (ceq_list (ceq_prod A1_ C1_)),
-                 ccompare_prod B2_ (ccompare_list (ccompare_prod A2_ C2_)),
-                 set_impl_prod B3_ set_impl_list)
-            arss))
-    (complete_arity (A1_, A2_, A3_) (C1_, C2_, C3_) cs);
+fun complete_set (A1_, A2_, A3_) cs arss =
+  list_all (fn (_, a) => complete_arity (A1_, A2_, A3_) cs a) arss;
 
-fun exe_complete_tcsigs (A1_, A2_, A3_) (B1_, B2_, B3_) (C1_, C2_, C3_) cs arss
-  = complete_set (A1_, A2_, A3_) (B1_, B2_, B3_) (C1_, C2_, C3_) cs arss;
+fun exe_complete_tcsigs (A1_, A2_, A3_) cs arss =
+  complete_set (A1_, A2_, A3_) cs arss;
 
-fun exe_wf_tcsigs (A1_, A2_, A3_) cs arss =
-  exe_coregular_tcsigs (A1_, A2_, A3_) cs arss andalso
-    (exe_complete_tcsigs (ceq_literal, ccompare_literal, set_impl_literal)
-       (A1_, A2_, A3_)
-       (ceq_list
-          (ceq_set
-            (cenum_literal, ceq_literal,
-              ccompare_cproper_interval cproper_interval_literal)),
-         ccompare_list
-           (ccompare_set
-             (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-               set_impl_literal)),
-         set_impl_list)
-       cs arss andalso
-      (exe_consistent_length_tcsigs (A1_, A2_, A3_)
-         (ceq_literal, ccompare_literal, set_impl_literal)
-         (ceq_set
-            (cenum_literal, ceq_literal,
-              ccompare_cproper_interval cproper_interval_literal),
-           ccompare_set
-             (finite_UNIV_literal, ceq_literal, cproper_interval_literal,
-               set_impl_literal))
-         arss andalso
-        exe_all_normalized_and_ex_tcsigs (A1_, A2_, A3_)
-          (ceq_literal, ccompare_literal, set_impl_literal) cs arss));
+fun exe_wf_tcsigs cs arss =
+  exe_coregular_tcsigs cs arss andalso
+    (exe_complete_tcsigs (ceq_literal, ccompare_literal, set_impl_literal) cs
+       arss andalso
+      (exe_consistent_length_tcsigs arss andalso
+        exe_all_normalized_and_ex_tcsigs cs arss));
 
 fun exe_wf_osig oss =
   exe_wf_subclass
     (cenum_literal, ceq_literal, ccompare_literal, equal_literal,
       mapping_impl_literal, set_impl_literal)
     (fst oss) andalso
-    (exe_wf_tcsigs (ceq_literal, ccompare_literal, set_impl_literal) (fst oss)
-       (snd oss) andalso
-      exe_osig_conds oss);
+    (exe_wf_tcsigs (fst oss) (snd oss) andalso exe_osig_conds oss);
 
 fun const_types_ok arities r f cto =
   list_all
@@ -4089,17 +3902,6 @@ set_empty (ceq_literal, ccompare_literal) (of_phantom set_impl_literala)))),
                                     set_empty (ceq_literal, ccompare_literal)
                                       (of_phantom set_impl_literala)))))));
 
-fun execonst_type_of (ExeSignature (x1, x2, x3)) = x1;
-
-fun exetyp_arity_of (ExeSignature (x1, x2, x3)) = x2;
-
-fun exesorts (ExeSignature (x1, x2, x3)) = x3;
-
-fun exe_sig_conds sigma =
-  distinct equal_literal (mapa fst (execonst_type_of sigma)) andalso
-    (distinct equal_literal (mapa fst (exetyp_arity_of sigma)) andalso
-      exe_osig_conds (exesorts sigma));
-
 fun axiom_terms_mapped consts arities r f ax =
   list_all
     (fn p =>
@@ -4256,16 +4058,17 @@ fun exeis_std_sig (ExeSignature (cto, tao, sorts)) =
                                     (of_phantom set_impl_literala))]))))))));
 
 fun exe_wf_theory (ExeTheory (ExeSignature (cto, tao, sa), ax)) =
-  exe_sig_conds (ExeSignature (cto, tao, sa)) andalso
-    (axiom_terms_relation cto tao
-       (set (ceq_prod ceq_literal ceq_literal,
-              ccompare_prod ccompare_literal ccompare_literal,
-              set_impl_prod set_impl_literal set_impl_literal)
-         (fst sa))
-       ax andalso
-      (exeis_std_sig (ExeSignature (cto, tao, sa)) andalso
-        (exe_wf_sig (ExeSignature (cto, tao, sa)) andalso
-          required_eq_axioms ax)));
+  distinct equal_literal (mapa fst cto) andalso
+    (distinct equal_literal (mapa fst tao) andalso
+      (axiom_terms_relation cto tao
+         (set (ceq_prod ceq_literal ceq_literal,
+                ccompare_prod ccompare_literal ccompare_literal,
+                set_impl_prod set_impl_literal set_impl_literal)
+           (fst sa))
+         ax andalso
+        (exeis_std_sig (ExeSignature (cto, tao, sa)) andalso
+          (exe_wf_sig (ExeSignature (cto, tao, sa)) andalso
+            required_eq_axioms ax))));
 
 fun exenormalize_sort cs s =
   filter (ceq_literal, ccompare_literal)

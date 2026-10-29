@@ -118,6 +118,22 @@ end
 
 section \<open>Adapted code setup\<close>
 
+lemma distinct_card_length_iff:
+  "distinct xs \<longleftrightarrow> card (set xs) = length xs"
+  by (metis distinct_card card_distinct)
+
+declare [[code drop: exe_class_conds]]
+lemma class_conds_indexed_code[code]:
+  "exe_class_conds cs = (card (set cs) = length cs)"
+  by (simp only: exe_class_conds_def distinct_card_length_iff)
+
+declare [[code drop: exe_ars_conds]]
+lemma arity_conds_list_code[code]:
+  "exe_ars_conds arss =
+    (card (set (map fst arss)) = length arss \<and>
+     list_all (\<lambda>(_, ars). card (set (map fst ars)) = length ars) arss)"
+  by (auto simp add: exe_ars_conds_def distinct_card_length_iff list_all_iff)
+
 text \<open>Avoid building set multiple times\<close>
 
 definition coregular_rows ::
@@ -136,6 +152,15 @@ definition coregular_set ::
   "(class \<times> class) set \<Rightarrow> ('a \<times> (class \<times> sort list) list) list \<Rightarrow> bool" where
   "coregular_set r arss \<longleftrightarrow>
     (\<forall>ars \<in> snd ` set arss. coregular_arity r ars)"
+
+declare [[code drop: coregular_arity coregular_set]]
+lemma coregular_arity_keys_code[code]:
+  "coregular_arity r ars = coregular_rows r ars (set (map fst ars))"
+  by (simp add: coregular_arity_def)
+
+lemma coregular_list_code[code]:
+  "coregular_set r arss = list_all (\<lambda>(_, ars). coregular_arity r ars) arss"
+  by (auto simp add: coregular_set_def list_all_iff)
 
 declare [[code drop: exe_coregular_tcsigs]]
 lemma coregular_code[code]:
@@ -163,6 +188,29 @@ definition complete_set ::
   "complete_set cs arss \<longleftrightarrow>
     (\<forall>ars \<in> snd ` set arss. complete_arity cs ars)"
 
+declare [[code drop: complete_arity complete_set]]
+lemma complete_arity_keys_code[code]:
+  "complete_arity cs ars = complete_keys cs (set (map fst ars))"
+  by (simp add: complete_arity_def)
+
+lemma complete_list_code[code]:
+  "complete_set cs arss = list_all (\<lambda>(_, ars). complete_arity cs ars) arss"
+  by (auto simp add: complete_set_def list_all_iff)
+
+lemma uniform_lengths_first:
+  "(\<forall>ss1 \<in> snd ` set ars. \<forall>ss2 \<in> snd ` set ars. length ss1 = length ss2) =
+    (case ars of [] \<Rightarrow> True
+      | (_, ss) # rest \<Rightarrow> list_all (\<lambda>(_, ss'). length ss = length ss') rest)"
+  by (cases ars; auto simp add: list_all_iff case_prod_unfold; metis snd_conv)
+
+declare [[code drop: exe_consistent_length_tcsigs]]
+lemma consistent_lengths_list_code[code]:
+  "exe_consistent_length_tcsigs arss =
+    list_all (\<lambda>(_, ars). case ars of [] \<Rightarrow> True
+      | (_, ss) # rest \<Rightarrow> list_all (\<lambda>(_, ss'). length ss = length ss') rest) arss"
+  by (simp add: exe_consistent_length_tcsigs_def uniform_lengths_first[symmetric]
+    list_all_iff case_prod_unfold)
+
 declare [[code drop: exe_complete_tcsigs]]
 lemma complete_code[code]:
   "exe_complete_tcsigs cs arss = complete_set cs arss"
@@ -186,6 +234,12 @@ definition all_sorts_sets ::
 definition all_sorts_relation ::
   "(class \<times> class) set \<Rightarrow> ('a \<times> ('b \<times> sort list) list) list \<Rightarrow> bool" where
   "all_sorts_relation r arss = all_sorts_sets r (Field r) arss"
+
+declare [[code drop: all_sorts_sets]]
+lemma all_sorts_list_code[code]:
+  "all_sorts_sets r f arss =
+    list_all (\<lambda>(_, ars). list_all (\<lambda>(_, ss). list_all (wf_sort_set r f) ss) ars) arss"
+  by (auto simp add: all_sorts_sets_def list_all_iff case_prod_unfold)
 
 declare [[code drop: exe_all_normalized_and_ex_tcsigs]]
 lemma all_sorts_code[code]:
@@ -310,15 +364,20 @@ lemma required_eq_axioms_correct:
   "required_eq_axioms ax = (eq_axs \<subseteq> set ax)"
   by (auto simp add: required_eq_axioms_def)
 
+lemma wf_sig_osig_conds:
+  "exe_wf_sig (ExeSignature cto tao sa) \<Longrightarrow> exe_osig_conds sa"
+  by (simp only: exe_wf_sig_code exe_wf_sig'.simps exe_wf_osig_def; blast)
+
 declare [[code drop: exe_wf_theory]]
 lemma wf_theory_indexed_code[code]:
   "exe_wf_theory (ExeTheory (ExeSignature cto tao sa) ax) =
-    (exe_sig_conds (ExeSignature cto tao sa) \<and>
+    (distinct (map fst cto) \<and> distinct (map fst tao) \<and>
      axiom_terms_relation cto tao (set (execlasses sa)) ax \<and>
      exeis_std_sig (ExeSignature cto tao sa) \<and>
      exe_wf_sig (ExeSignature cto tao sa) \<and> required_eq_axioms ax)"
   by (simp only: exe_wf_theory_code exe_wf_theory'.simps
-    axiom_terms_relation_correct required_eq_axioms_correct)
+    axiom_terms_relation_correct required_eq_axioms_correct exe_sig_conds_def exesignature.sel;
+    blast dest: wf_sig_osig_conds)
 
 text \<open>Index successors instead of comparing unrelated pairs of edges.\<close>
 
