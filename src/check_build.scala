@@ -62,9 +62,18 @@ object Check_Build {
       case _ =>
     }
 
-    def shutdown(finished: Boolean): Prover.Protocol_Output => Boolean = { _ =>
+    def shutdown(msg: Prover.Protocol_Output): Boolean = {
+      val thms =
+        Exn.capture {
+          import XML.Decode._
+          list(string)(Symbol.decode_yxml(msg.text))
+        }
       result.change { res =>
-        val res1 = res.copy(finished = finished)
+        val res1 =
+          thms match {
+            case Exn.Res(thms) => res.copy(thms = thms, finished = true)
+            case Exn.Exn(_) => res
+          }
         session.protocol_command("Prover.stop", XML.Encode.int(res1.rc))
         res1
       }
@@ -74,8 +83,8 @@ object Check_Build {
     session.init_protocol_handler(new Session.Protocol_Handler {
       override val functions: Session.Protocol_Functions =
         List(
-          Markup.Build_Session_Finished.name -> shutdown(false),
-          Markup_Check_Session_Finished.name -> shutdown(true))
+          Markup.Build_Session_Finished.name -> shutdown,
+          Markup_Check_Session_Finished.name -> shutdown)
     })
 
     val process =
@@ -112,7 +121,8 @@ object Check_Build {
       sessions_structure.build_selection(Sessions.Selection(sessions = trusted_sessions)).toSet
 
     def augment_options(session: String): Options.Update =
-      if (is_trusted(session)) Nil else List(Options.Spec.make("record_proofs"))
+      if (is_trusted(session)) Nil
+      else List(Options.Spec.eq("record_proofs", "3"), Options.Spec.make("record_theories"))
 
     val build_result =
       Build.build(options, selection = selection, browser_info = browser_info, progress = progress,
