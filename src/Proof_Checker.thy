@@ -1,59 +1,49 @@
 \<^marker>\<open>author Fabian Huch\<close>
-theory Check_Build
+theory Proof_Checker
   imports Pure
   keywords "check_theory" :: diag
 begin
 
-ML_file \<open>export.ML\<close>
+ML \<open>open Context\<close>
+
+ML_file \<open>checker_export.ML\<close>
 ML_file \<open>checker.ML\<close>
 
 ML \<open>
 fun check_thmss trusted (checked0, seen0) thmss thy =
   let
-    val (theory as (sign, ax)) = Checker.theory_of thy
-    val ax1 = map (fst o snd) checked0 @ ax
-    val _ = if Checker.wf_theory theory then () else error "Theory not well-formed"
+    val cthy = case Checker.cthy thy of SOME cthy => cthy | NONE => error "Theory not well-formed"
 
     val seen = Unsynchronized.ref seen0
 
-    fun check_proof name t p =
+    fun check_proof name thm =
       let
-        fun check_pthm (thm_header as {prop, types, thm_name, theory_name, ...}, thm_body) =
-          let
-            val serial = #serial (Proofterm.thm_header_id thm_header)
-            val Tinst = the types |> map Checker.typ
+        fun checked_pthm_axm (pthm as (header as {thm_name, theory_name, ...}, _)) =
+          let val serial = #serial (Proofterm.thm_header_id header)
           in
             case Inttab.lookup (!seen) serial of
-               SOME (_, (t1, Ts)) => Checker.PAxm (t1, Ts ~~ Tinst)
-             | NONE =>
-                let
-                  val (name1, (t1, Ts)) =
-                    if Symtab.defined trusted theory_name 
-                    then ("", (Checker.term prop, Checker.tvars_of prop))
-                    else
-                      Proofterm.thm_body_proof_open thm_body
-                      |> Proofterm.reconstruct_proof thy prop
-                      |> check_proof (Thm_Name.print_pos thm_name) prop
-                  val _ = Unsynchronized.change seen (Inttab.update (serial, (name1, (t1, Ts))))
-                in Checker.PAxm (t1, Ts ~~ Tinst) end
+              SOME (_, cthm) => cthm
+            | NONE =>
+              let
+                val (name1, cthm) =
+                  if Symtab.defined trusted theory_name then ("", Checker.axiomatize pthm)
+                  else check_proof (Thm_Name.print_pos thm_name) (Checker.pthm thy pthm)
+                val _ = Unsynchronized.change seen (Inttab.update (serial, (name1, cthm)))
+              in cthm end
           end
 
-      val proofterm = Checker.proofterm check_pthm p
-      val ax2 = Inttab.dest (!seen) |> map (fst o snd o snd)
-      val _ =
-        if Checker.wf_theory_proof (sign, ax1 @ ax2) proofterm (Checker.term t) then ()
-        else error ("Incorrect proof term in " ^ name)
-    in (name, (Checker.term t, Checker.tvars_of t)) end
+        val prf = Checker.proof checked_pthm_axm thm
+        val cthms = (checked0 @ (Inttab.dest (!seen) |> map snd)) |> map snd
+        val cthm =
+          case Checker.check (Checker.extend cthy cthms) thm prf of
+            SOME cthm => cthm 
+          | NONE => error ("Incorrect proof term for " ^ name)
+      in (name, cthm) end
 
-    fun check_thm thm_name thm =
-      let
-        val thm1 = thm |> Thm.transfer thy |> Thm.unconstrainT
-        val prf = (Thm.reconstruct_proof_of thm1)
-        val (name, (t, Ts)) = check_proof (Thm_Name.print thm_name) (Thm.full_prop_of thm1) prf
-      in (name, (t, Ts)) end
-
+    fun check_thm thm_name thm = check_proof (Thm_Name.print thm_name) (Checker.thm thy thm)
     fun check_thms (name, thms) = map_index (fn (i, thm) => check_thm (name, i) thm) thms
     val checked = maps check_thms thmss
+
   in (checked, !seen) end
 
 fun check_current thy =

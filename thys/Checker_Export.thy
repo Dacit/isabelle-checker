@@ -16,9 +16,11 @@ definition nat :: "integer \<Rightarrow> nat" where
 definition sort :: "String.literal list \<Rightarrow> sort" where
   "sort xs = set xs"
 
-definition eq_term :: "term \<Rightarrow> term \<Rightarrow> bool" where
-  "eq_term t1 t2 \<equiv> t1 = t2"
-
+definition eq_term :: "(term * term) \<Rightarrow> bool" where
+  "eq_term \<equiv> \<lambda>(t1, t2). t1 = t2"
+                          
+definition eq_Ts :: "((variable * sort) * (variable * sort)) \<Rightarrow> bool" where
+  "eq_Ts \<equiv> \<lambda>(Ts1, Ts2). Ts1 = Ts2"
 
 section \<open>Containers Setup\<close>
 
@@ -79,6 +81,15 @@ definition "card_UNIV = Phantom(term) 0"
 instance by intro_classes
   (simp_all add: finite_UNIV_term_def card_UNIV_term_def infinite_term)
 end
+
+
+subsection \<open>Substitution without eager lifting\<close>
+
+declare [[code drop: subst_bv]]
+
+lemma subst_bv_occurrence_code [code]:
+  "subst_bv u t = subst_bv1 t 0 u"
+  by (simp add: subst_bv_def)
 
 
 subsection \<open>Needed by set operations, emtpy here\<close>
@@ -494,7 +505,7 @@ text \<open>Optimized Export\<close>
 
 export_code exereplay exe_wf_theory
   Bv PBound Tv Free ExeTheory ExeSignature
-  int nat sort exenormalize_sort eq_term
+  int nat sort exenormalize_sort eq_term eq_Ts
   in SML module_name ExportCheck file_prefix export
 
 end

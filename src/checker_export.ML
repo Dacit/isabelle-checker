@@ -46,7 +46,8 @@ structure ExportCheck : sig
   val nat : IntInf.int -> nat
   val sort : string list -> string set
   val exereplay : exetheory -> proofterm -> term option
-  val eq_term : term -> term -> bool
+  val eq_Ts : (variable * string set) * (variable * string set) -> bool
+  val eq_term : term * term -> bool
   val exe_wf_theory : exetheory -> bool
   val exenormalize_sort : (string * string) list -> string set -> string set
 end = struct
@@ -2334,12 +2335,6 @@ fun ball (A1_, A2_) (RBT_set rbt) p =
       | SOME _ => dlist_all A1_ p dxs)
   | ball (A1_, A2_) (Set_Monad xs) p = list_all p xs;
 
-fun lift (Bv i) n = (if less_eq_nat n i then Bv (plus_nat i one_nat) else Bv i)
-  | lift (Abs (t, body)) n = Abs (t, lift body (plus_nat n one_nat))
-  | lift (App (f, t)) n = App (lift f n, lift t n)
-  | lift (Ct (v, va)) n = Ct (v, va)
-  | lift (Fv (v, va)) n = Fv (v, va);
-
 fun name (Free n) = n
   | name (Var (n, uu)) = n;
 
@@ -2461,16 +2456,19 @@ fun sort_leq (A1_, A2_) (B1_, B2_) sub s1 s2 =
       bex (A1_, A2_) s1
         (fn c_1 => class_leq (A1_, A2_) (B1_, B2_) sub c_1 c_2));
 
-fun subst_bv2 (Bv i) n u =
-  (if less_nat i n then Bv i
-    else (if equal_nata i n then u else Bv (minus_nat i one_nat)))
-  | subst_bv2 (Abs (t, body)) n u =
-    Abs (t, subst_bv2 body (plus_nat n one_nat) (lift u zero_nat))
-  | subst_bv2 (App (f, t)) n u = App (subst_bv2 f n u, subst_bv2 t n u)
-  | subst_bv2 (Ct (v, va)) uu uv = Ct (v, va)
-  | subst_bv2 (Fv (v, va)) uu uv = Fv (v, va);
+fun incr_boundvars inc t = incr_bv inc zero_nat t;
 
-fun subst_bv u t = subst_bv2 t zero_nat u;
+fun subst_bv1 (Bv i) lev u =
+  (if less_nat i lev then Bv i
+    else (if equal_nata i lev then incr_boundvars lev u
+           else Bv (minus_nat i one_nat)))
+  | subst_bv1 (Abs (t, body)) lev u =
+    Abs (t, subst_bv1 body (plus_nat lev one_nat) u)
+  | subst_bv1 (App (f, t)) lev u = App (subst_bv1 f lev u, subst_bv1 t lev u)
+  | subst_bv1 (Ct (v, va)) uu uv = Ct (v, va)
+  | subst_bv1 (Fv (v, va)) uu uv = Fv (v, va);
+
+fun subst_bv u t = subst_bv1 t zero_nat u;
 
 fun impl_of (Alist x) = x;
 
@@ -2677,8 +2675,6 @@ fun map_types f (Ct (a, t)) = Ct (a, f t)
   | map_types f (Bv i) = Bv i
   | map_types f (Abs (ta, t)) = Abs (f ta, map_types f t)
   | map_types f (App (t, u)) = App (map_types f t, map_types f u);
-
-fun incr_boundvars inc t = incr_bv inc zero_nat t;
 
 fun subst_bvs1 (Bv n) lev args =
   (if less_nat n lev then Bv n
@@ -3282,6 +3278,13 @@ fun exereplay (ExeTheory (ExeSignature (cto, tao, sa), ax)) p =
            set_impl_prod set_impl_literal set_impl_literal)
       (fst sa))
     ax p;
+
+fun eq_Ts x =
+  (fn (a, b) =>
+    equal_proda equal_variable
+      (equal_set (cenum_literal, ceq_literal, ccompare_literal, equal_literal))
+      a b)
+    x;
 
 val eq_reflexive_ax : term =
   App (App (Ct ("Pure.eq",
@@ -3966,7 +3969,7 @@ fun execlass_les A_ cs c1 c2 =
   membera (equal_prod A_ A_) cs (c1, c2) andalso
     not (membera (equal_prod A_ A_) cs (c2, c1));
 
-fun eq_term t1 t2 = equal_terma t1 t2;
+fun eq_term x = (fn (a, b) => equal_terma a b) x;
 
 val eq_combination_ax : term =
   App (App (Ct ("Pure.imp",

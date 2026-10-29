@@ -1,10 +1,11 @@
 (*  Title:      checker.ML
     Author:     Fabian Huch
 
-Glue-code for the Metalogic Proof Checker.
+ML module for the Metalogic Proof 
 *)
 
-signature CHECKER = sig
+signature CHECKER_EXPORT =
+sig
   (* primitives *)
   type int
   type nat
@@ -13,105 +14,157 @@ signature CHECKER = sig
   type name
   val int: IntInf.int -> int
   val nat: IntInf.int -> nat
-  val class: string -> class
   val sort: string list -> sort
-  val name: string -> name
+  val normalize_sort: (class * class) list -> sort -> sort
 
   (* types *)
   datatype var = Free of string | Var of (string * int)
   datatype typ = Ty of name * typ list | Tv of var * sort
   datatype term =
     Ct of name * typ | Fv of var * typ | Bv of nat | Abs of typ * term | App of term * term
-  datatype proofterm =
-     PAxm of term * ((var * sort) * typ) list
+  type tsubst = ((var * sort) * typ) list
+  datatype proof =
+     PAxm of term * tsubst
    | PBound of nat
-   | Abst of typ * proofterm
-   | AbsP of term * proofterm
-   | Appt of proofterm * term
-   | AppP of proofterm * proofterm
+   | Abst of typ * proof
+   | AbsP of term * proof
+   | Appt of proof * term
+   | AppP of proof * proof
    | OfClass of typ * string
    | Hyp of term
-  val typ: Term.typ -> typ
-  val term: Term.term -> term
-  val tvars_of: Term.term -> (var * sort) list
-  val tsubst: Term.term -> Term.typ list -> ((var * sort) * typ) list
-  val proofterm: ((Proofterm.thm_header * Proofterm.thm_body) -> proofterm) -> Proofterm.proof ->
-    proofterm
 
-  (* signature *)
+  (* theory signature *)
   type osig = (class * class) list * (name * (class * sort list) list) list
   type sign = (name * typ) list * (name * nat) list * osig
-  val sign_of: Context.theory -> sign
   type theory = sign * term list
-  val theory_of: Context.theory -> theory
 
   (* checker *)
   val wf_theory: theory -> bool
-  val wf_theory_proof: theory -> proofterm -> term -> bool
+  val wf_theory_replay: theory -> proof -> term option
+
+  (* extra *)
+  val eq_term: term * term -> bool
+  val eq_Ts: (var * sort) * (var * sort) -> bool
 end
 
-structure Checker : CHECKER = struct
-structure C = ExportCheck
+(* safe signature *)
+signature CHECKER =
+sig
+  type thm
+  val thm: theory -> Thm.thm -> thm
+  type pthm = Proofterm.thm_header * Proofterm.thm_body
+  val pthm: theory -> pthm -> thm
+  type proof
+  type cthm
+  val proof: (pthm -> cthm) -> thm -> proof
+  type cthy
+  val cthy: theory -> cthy option
+  val extend: cthy -> cthm list -> cthy
+  val axiomatize: pthm -> cthm
+  val check: cthy -> thm -> proof -> cthm option
+end
 
-type int = C.int
-type nat = C.nat
+structure Checker : CHECKER =
+struct
+
+structure C: CHECKER_EXPORT = struct
+open ExportCheck
+
 type class = string
-type sort = string C.set
+type sort = string set
 type name = string
 
-val int = C.int
-val nat = C.nat
-val class = I  
-val sort = C.sort
-val name = I
+val normalize_sort = exenormalize_sort
 
-datatype var = datatype C.variable
-datatype typ = datatype C.typ
-datatype term = datatype C.term
-datatype proofterm = datatype C.proofterm
+datatype var = datatype variable
+datatype proof = datatype proofterm
+
+type tsubst = ((var * sort) * typ) list
+type osig = (name * name) list * (name * (class * sort list) list) list
+type sign = (name * typ) list * (name * nat) list * osig
+type theory = sign * term list
+
+fun wf_theory (sign, axioms) = exe_wf_theory (ExeTheory (ExeSignature sign, axioms))
+fun wf_theory_replay (sign, axioms) proofterm =
+  exereplay (ExeTheory (ExeSignature sign, axioms)) proofterm
+end
 
 fun typ T =
   case T of
-    Term.Type (a, Ts) => Ty (a, map typ Ts)
-  | Term.TFree (x, S) => Tv (Free x, sort S)
-  | Term.TVar ((x, i), S) => Tv (Var (x, int i), sort S)
+    Term.Type (a, Ts) => C.Ty (a, map typ Ts)
+  | Term.TFree (x, S) => C.Tv (C.Free x, C.sort S)
+  | Term.TVar ((x, i), S) => C.Tv (C.Var (x, C.int i), C.sort S)
 
 fun term t =
   case t of
-    Term.Const (a, T) => Ct (a, typ T)
-  | Term.Free (x, T) => Fv (Free x, typ T)
-  | Term.Var ((x, i), T) => Fv (Var (x, int i), typ T)
-  | Term.Bound i => Bv (nat i)
-  | Term.Abs (_, T, t) => Abs (typ T, term t)
-  | t1 $ t2 => App (term t1, term t2)
+    Term.Const (a, T) => C.Ct (a, typ T)
+  | Term.Free (x, T) => C.Fv (C.Free x, typ T)
+  | Term.Var ((x, i), T) => C.Fv (C.Var (x, C.int i), typ T)
+  | Term.Bound i => C.Bv (C.nat i)
+  | Term.Abs (_, T, t) => C.Abs (typ T, term t)
+  | t1 $ t2 => C.App (term t1, term t2)
 
-fun tvars_of t = (Term.add_tvars t [] |> rev) |> map (fn ((x, i), S) => (Var (x, int i), sort S))
+fun tvars_of t =
+  (Term.add_tvars t [] |> rev) |> map (fn ((x, i), S) => (C.Var (x, C.int i), C.sort S))
 fun tsubst t Ts = map2 pair (tvars_of t) (map typ Ts)
 
 fun proofterm f prf =
   let
     fun proof prf =
       case prf of
-        Proofterm.PBound i => PBound (nat i)
-      | Proofterm.Abst (_, SOME T, prf) => Abst (typ T, proof prf)
+        Proofterm.MinProof => error "Ill-formed proof term: MinProof"
+      | Proofterm.PBound i => C.PBound (C.nat i)
+      | Proofterm.Abst (_, SOME T, prf) => C.Abst (typ T, proof prf)
       | Proofterm.Abst (_, NONE, _) => error "Ill-formed proof term: Abst NONE"
-      | Proofterm.AbsP (_, SOME t, prf) => AbsP (term t, proof prf)
+      | Proofterm.AbsP (_, SOME t, prf) => C.AbsP (term t, proof prf)
       | Proofterm.AbsP (_, NONE, _) => error "Ill-formed proof term: AbsP NONE"
-      | prf % SOME t => Appt (proof prf, term t)
+      | prf % SOME t => C.Appt (proof prf, term t)
       | _ % NONE => error "Ill-formed proof term: Appt NONE" 
-      | prf1 %% prf2 => AppP (proof prf1, proof prf2)
-      | Proofterm.Hyp t => Hyp (term t)
-      | Proofterm.PAxm (_, t, SOME Ts) => PAxm (term t, tsubst t Ts)
+      | prf1 %% prf2 => C.AppP (proof prf1, proof prf2)
+      | Proofterm.Hyp t => C.Hyp (term t)
+      | Proofterm.PAxm (_, t, SOME Ts) => C.PAxm (term t, tsubst t Ts)
       | Proofterm.PAxm (_, _, NONE) => error "Ill-formed proof term: PAxm NONE" 
-      | Proofterm.PClass (T, c) => OfClass (typ T, c)
+      | Proofterm.PClass (T, c) => C.OfClass (typ T, c)
+      | Proofterm.Oracle _ => error "Rejecting oracle proof"
       | Proofterm.PThm (thm_header as {types = SOME _, ...}, thm_body) => f (thm_header, thm_body)
       | Proofterm.PThm ({types = NONE, ...}, _) => error "Ill-formed proof term: PThm NONE"
-      | Proofterm.Oracle _ => error "Rejecting oracle proof"
-      | Proofterm.MinProof => error "Ill-formed proof term: MinProof"
   in proof prf end
 
-type osig = (name * name) list * (name * (class * sort list) list) list
-type sign = (name * typ) list * (name * nat) list * osig
+type pthm = Proofterm.thm_header * Proofterm.thm_body
+datatype thm = Thm of {t: C.term, Ts: (C.var * C.sort) list, prf: Proofterm.proof}
+
+(* pthm needs variables abstracted *)
+fun pthm_term prop =
+  let
+    val Ts = tvars_of prop (* order needs to be kept *)
+    val prop1 = Proofterm.forall_intr_variables_term prop
+  in if eq_set C.eq_Ts (Ts, tvars_of prop1) then (term prop1, Ts) else error "TVars changed" end
+
+fun pthm thy ({prop, ...}, thm_body) =
+  let
+    val (t, Ts) = pthm_term prop
+    val prf =
+      Proofterm.thm_body_proof_open thm_body
+      |> Proofterm.reconstruct_proof thy prop
+      |> Proofterm.forall_intr_variables prop
+  in Thm {t = t, Ts = Ts, prf = prf} end
+
+fun thm thy thm =
+  let 
+    val thm1 = thm |> Thm.transfer thy |> Thm.unconstrainT
+    val prop = Thm.full_prop_of thm1
+  in Thm {t = term prop, Ts = tvars_of prop, prf = Thm.reconstruct_proof_of thm1} end
+
+type proof = C.proof
+datatype cthm = Cthm of {t: C.term, Ts: (C.var * C.sort) list}
+
+fun instantiate (Cthm {t, Ts}) ({types, ...}, _) =
+  let val Tinst = map typ (the types)
+  in C.PAxm (t, Ts ~~ Tinst) end
+
+fun proof f (Thm {prf, ...}) = proofterm (fn pthm => instantiate (f pthm) pthm) prf
+
+datatype cthy = Cthy of {theory: C.theory, axs: cthm list}
 
 fun sign_of thy =
   let
@@ -122,7 +175,7 @@ fun sign_of thy =
       |> map_filter (fn (a, (T, NONE)) => SOME (a, typ T) | _ => NONE)
     val tsig = Sign.tsig_of thy
     val types = Type.logical_types tsig
-    val type_arity = map (swap o ` (nat o Type.arity_number tsig)) types
+    val type_arity = map (swap o ` (C.nat o Type.arity_number tsig)) types
 
     val algebra = Sign.classes_of thy
 
@@ -131,25 +184,33 @@ fun sign_of thy =
 
     val sub = Sorts.all_classes algebra |> maps class_sub
     val arities = Sorts.arities_of algebra
+    val sort = (C.normalize_sort sub) o C.sort
 
-    (* Sorts normalized according to paper *)
-    val normalize_sorts = C.exenormalize_sort sub o sort
+    fun make_tc_sig type_name =
+      (type_name, Symtab.lookup_list arities type_name |> map (apsnd (map sort)))
 
-    (* arities for all logical types (including those without class isntances) *)
-    val tcs = 
-      map (fn a => (a, Symtab.lookup_list arities a |> map (apsnd (map normalize_sorts)))) types
+    (* arities for all logical types (including those without class instances) *)
+    val tcs = map make_tc_sig types
     val osig = (sub, tcs)
   in (const_type, type_arity, osig) end;
-
-type theory = sign * term list
 
 fun theory_of thy =
   (sign_of thy, Thm.all_axioms_of thy |> map (term o Thm.full_prop_of o Thm.unconstrainT o snd))
 
-fun wf_theory (sign, axioms) = C.exe_wf_theory (C.ExeTheory (C.ExeSignature sign, axioms))
-fun wf_theory_proof (sign, axioms) proofterm term =
-  case C.exereplay (C.ExeTheory (C.ExeSignature sign, axioms)) proofterm of
-    NONE => false
-  | SOME term1 => C.eq_term term term1
+fun cthy thy =
+  let val theory = theory_of thy
+  in if C.wf_theory theory then SOME (Cthy {theory = theory, axs = []}) else NONE end
+
+fun extend (Cthy {theory, axs}) thms = Cthy {theory = theory, axs = axs @ thms}
+
+fun axiomatize ({prop, ...}, _) =
+  let val (t, Ts) = pthm_term prop
+  in Cthm {t = t, Ts = Ts} end
+
+fun check (Cthy {theory = (sign, axs0), axs}) (Thm {t, Ts, ...}) prf =
+  let
+    val checked = C.wf_theory_replay (sign, axs0 @ (map (fn Cthm {t, ...} => t) axs)) prf
+    fun cthm t1 = if C.eq_term (t, t1) then SOME (Cthm {t = t, Ts = Ts}) else NONE
+  in checked |> Option.mapPartial cthm end
 
 end
