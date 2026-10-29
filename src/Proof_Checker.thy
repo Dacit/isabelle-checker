@@ -66,17 +66,22 @@ val _ =
 
 fun check_theory theory_name trusted_theories =
   let
-    fun check_segment trusted ({prev_state, state, ...}, results0) =
-      let 
-        val thy0 = Toplevel.theory_of prev_state
-        val thy1 = Toplevel.theory_of state
-        val thmss =
-          Facts.dest_static true [Global_Theory.facts_of thy0] (Global_Theory.facts_of thy1)
-      in if null thmss then results0 else check_thmss trusted results0 thmss thy1 end
-
     val trusted = Symtab.make trusted_theories
-    val segments = Build.get_theory_segments theory_name
-    val (checked, seen) = List.foldl (check_segment trusted) ([], Inttab.empty) segments
+    fun check_segment (st, (prev_thys, results0)) =
+      let 
+        val thy = Toplevel.theory_of st
+        val thmss =
+          Facts.dest_static true (map Global_Theory.facts_of prev_thys) (Global_Theory.facts_of thy)
+      in ([thy], if null thmss then results0 else check_thmss trusted results0 thmss thy) end
+
+    val init = ([], Inttab.empty)
+
+    fun check_states states =
+      case states of [] => ([], init) | st :: _ =>
+        List.foldl check_segment (st |> Toplevel.theory_of |> Theory.parents_of, init) states
+
+    val states = Build.get_theory_segments theory_name |> map #state |> filter Toplevel.is_theory
+    val (_, (checked, seen)) = check_states states
     val checked1 = Inttab.dest seen |> map (fst o snd) |> filter_out (equal "")
   in map fst checked @ checked1 end
 \<close>

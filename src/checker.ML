@@ -137,8 +137,10 @@ datatype thm = Thm of {t: C.term, Ts: (C.var * C.sort) list, prf: Proofterm.proo
 fun pthm_term prop =
   let
     val Ts = tvars_of prop (* order needs to be kept *)
-    val prop1 = Proofterm.forall_intr_variables_term prop
-  in if eq_set C.eq_Ts (Ts, tvars_of prop1) then (term prop1, Ts) else error "TVars changed" end
+    val prop1 = prop |> Proofterm.forall_intr_variables_term |> Envir.beta_eta_contract
+  in 
+    if eq_set C.eq_Ts (Ts, tvars_of prop1) then (term prop1, Ts) else error "TVars changed"
+  end
 
 fun pthm thy ({prop, ...}, thm_body) =
   let
@@ -151,8 +153,8 @@ fun pthm thy ({prop, ...}, thm_body) =
 
 fun thm thy thm =
   let 
-    val thm1 = thm |> Thm.transfer thy |> Thm.unconstrainT
-    val prop = Thm.full_prop_of thm1
+    val thm1 = Thm.transfer thy thm
+    val prop = thm1 |> Thm.full_prop_of |> Envir.beta_eta_contract 
   in Thm {t = term prop, Ts = tvars_of prop, prf = Thm.reconstruct_proof_of thm1} end
 
 type proof = C.proof
