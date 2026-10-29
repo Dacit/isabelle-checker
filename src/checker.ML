@@ -50,18 +50,18 @@ end
 (* safe signature *)
 signature CHECKER =
 sig
+  type cthy
+  val cthy: theory -> cthy option
+  val cthy_map: cthy option -> theory -> cthy option
   type thm
-  val thm: theory -> Thm.thm -> thm
+  val thm: cthy -> Thm.thm -> thm
   type pthm = Proofterm.thm_header * Proofterm.thm_body
-  val pthm: theory -> pthm -> thm
+  val pthm: cthy -> pthm -> thm
   type proof
   type cthm
   val proof: (pthm -> cthm) -> thm -> proof
-  type cthy
-  val cthy: theory -> cthy option
-  val extend: cthy -> cthm list -> cthy
   val axiomatize: pthm -> cthm
-  val check: cthy -> thm -> proof -> cthm option
+  val check: cthy -> cthm list -> thm -> proof -> cthm option
 end
 
 structure Checker : CHECKER =
@@ -133,40 +133,7 @@ fun proofterm f prf =
 type pthm = Proofterm.thm_header * Proofterm.thm_body
 datatype thm = Thm of {t: C.term, Ts: (C.var * C.sort) list, prf: Proofterm.proof}
 
-(* pthm needs variables abstracted *)
-fun pthm_term prop =
-  let
-    val Ts = tvars_of prop (* order needs to be kept *)
-    val prop1 = prop |> Proofterm.forall_intr_variables_term |> Envir.beta_eta_contract
-  in 
-    if eq_set C.eq_Ts (Ts, tvars_of prop1) then (term prop1, Ts) else error "TVars changed"
-  end
-
-fun pthm thy ({prop, ...}, thm_body) =
-  let
-    val (t, Ts) = pthm_term prop
-    val prf =
-      Proofterm.thm_body_proof_open thm_body
-      |> Proofterm.reconstruct_proof thy prop
-      |> Proofterm.forall_intr_variables prop
-  in Thm {t = t, Ts = Ts, prf = prf} end
-
-fun thm thy thm =
-  let 
-    val thm1 = Thm.transfer thy thm
-    val prop = thm1 |> Thm.full_prop_of |> Envir.beta_eta_contract 
-  in Thm {t = term prop, Ts = tvars_of prop, prf = Thm.reconstruct_proof_of thm1} end
-
-type proof = C.proof
-datatype cthm = Cthm of {t: C.term, Ts: (C.var * C.sort) list}
-
-fun instantiate (Cthm {t, Ts}) ({types, ...}, _) =
-  let val Tinst = map typ (the types)
-  in C.PAxm (t, Ts ~~ Tinst) end
-
-fun proof f (Thm {prf, ...}) = proofterm (fn pthm => instantiate (f pthm) pthm) prf
-
-datatype cthy = Cthy of {theory: C.theory, axs: cthm list}
+datatype cthy = Cthy of {thy: theory, theory: C.theory}
 
 fun sign_of thy =
   let
@@ -196,22 +163,70 @@ fun sign_of thy =
     val osig = (sub, tcs)
   in (const_type, type_arity, osig) end;
 
-fun theory_of thy =
-  (sign_of thy, Thm.all_axioms_of thy |> map (term o Thm.full_prop_of o Thm.unconstrainT o snd))
+fun eq_sign (thy1, thy2) =
+  pointer_eq (Sign.classes_of thy1, Sign.classes_of thy2) andalso
+  Consts.eq_consts (Sign.consts_of thy1, Sign.consts_of thy2) andalso
+  Type.eq_tsig (Sign.tsig_of thy1, Sign.tsig_of thy2)
+
+fun axs_of thy = Thm.all_axioms_of thy |> map (term o Thm.full_prop_of o Thm.unconstrainT o snd)
+fun eq_axs (thy1, thy2) = pointer_eq (Theory.axiom_table thy1, Theory.axiom_table thy2)
+
+fun theory_of thy = (sign_of thy, axs_of thy)
 
 fun cthy thy =
   let val theory = theory_of thy
-  in if C.wf_theory theory then SOME (Cthy {theory = theory, axs = []}) else NONE end
+  in if C.wf_theory theory then SOME (Cthy {thy = thy, theory = theory}) else NONE end
 
-fun extend (Cthy {theory, axs}) thms = Cthy {theory = theory, axs = axs @ thms}
+fun cthy_map cthy0 thy1 =
+  case cthy0 of
+    SOME (Cthy {thy, theory = (sign, axs)}) =>
+      if eq_sign (thy, thy1)
+      then
+        let val axs1 = if eq_axs (thy, thy1) then axs else axs_of thy1
+        in SOME (Cthy {thy = thy1, theory = (sign, axs1)}) end
+      else NONE
+  | NONE => NONE
+
+(* pthm needs variables abstracted *)
+fun pthm_term prop =
+  let
+    val Ts = tvars_of prop (* order needs to be kept *)
+    val prop1 = prop |> Proofterm.forall_intr_variables_term |> Envir.beta_eta_contract
+  in 
+    if eq_set C.eq_Ts (Ts, tvars_of prop1) then (term prop1, Ts) else error "TVars changed"
+  end
+
+fun pthm (Cthy cthy) ({prop, ...}, thm_body) =
+  let
+    val (t, Ts) = pthm_term prop
+    val prf =
+      Proofterm.thm_body_proof_open thm_body
+      |> Proofterm.reconstruct_proof (#thy cthy) prop
+      |> Proofterm.forall_intr_variables prop
+  in Thm {t = t, Ts = Ts, prf = prf} end
+
+fun thm (Cthy cthy) thm =
+  let 
+    val thm1 = Thm.transfer (#thy cthy) thm
+    val prop = thm1 |> Thm.full_prop_of |> Envir.beta_eta_contract 
+  in Thm {t = term prop, Ts = tvars_of prop, prf = Thm.reconstruct_proof_of thm1} end
+
+type proof = C.proof
+datatype cthm = Cthm of {t: C.term, Ts: (C.var * C.sort) list}
+
+fun instantiate (Cthm {t, Ts}) ({types, ...}, _) =
+  let val Tinst = map typ (the types)
+  in C.PAxm (t, Ts ~~ Tinst) end
+
+fun proof f (Thm {prf, ...}) = proofterm (fn pthm => instantiate (f pthm) pthm) prf
 
 fun axiomatize ({prop, ...}, _) =
   let val (t, Ts) = pthm_term prop
   in Cthm {t = t, Ts = Ts} end
 
-fun check (Cthy {theory = (sign, axs0), axs}) (Thm {t, Ts, ...}) prf =
+fun check (Cthy {theory = (sign, axs0), ...}) cthms (Thm {t, Ts, ...}) prf =
   let
-    val checked = C.wf_theory_replay (sign, axs0 @ (map (fn Cthm {t, ...} => t) axs)) prf
+    val checked = C.wf_theory_replay (sign, axs0 @ (map (fn Cthm {t, ...} => t) cthms)) prf
     fun cthm t1 = if C.eq_term (t, t1) then SOME (Cthm {t = t, Ts = Ts}) else NONE
   in checked |> Option.mapPartial cthm end
 
