@@ -1,6 +1,6 @@
-session Checker_Export = Metalogic_ProofChecker +
+session Checker_Export = Containers +
   sessions
-    Containers
+    Metalogic_ProofChecker
   theories
     Checker_Export
   export_files (in "../src") [2]
