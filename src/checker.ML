@@ -1,7 +1,7 @@
 (*  Title:      checker.ML
     Author:     Fabian Huch
 
-ML module for the Metalogic Proof 
+ML module for the Metalogic Proof Checker.
 *)
 
 signature CHECKER_EXPORT =
