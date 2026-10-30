@@ -10,32 +10,39 @@ ML_file \<open>checker_export.ML\<close>
 ML_file \<open>checker.ML\<close>
 
 ML \<open>
+fun lazy_default opt f = case opt of SOME e => e | NONE => f ()
+fun check opt msg = lazy_default opt (fn () => error msg)
+
+fun cache table_ref serial value =
+  (Unsynchronized.change table_ref (Inttab.update (serial, value)); value)
+
+fun cached table_ref f serial =
+  lazy_default (Inttab.lookup (!table_ref) serial) ((cache table_ref serial) o f)
+
 fun check_thmss trusted (checked0, seen0) thmss cthy =
   let
     val seen = Unsynchronized.ref seen0
 
     fun check_proof name thm =
       let
+        val proof_seen = Unsynchronized.ref Inttab.empty
+
+        fun lookup_global f serial = snd (cached seen f serial)
+        fun lookup f serial = cached proof_seen (fn () => lookup_global f serial) serial
+
         fun checked_pthm_axm (pthm as (header as {thm_name, theory_name, ...}, _)) =
-          let val serial = #serial (Proofterm.thm_header_id header)
-          in
-            case Inttab.lookup (!seen) serial of
-              SOME (_, cthm) => cthm
-            | NONE =>
-              let
-                val (name1, cthm) =
-                  if Symtab.defined trusted theory_name then ("", Checker.axiomatize pthm)
-                  else check_proof (Thm_Name.print_pos thm_name) (Checker.pthm cthy pthm)
-                val _ = Unsynchronized.change seen (Inttab.update (serial, (name1, cthm)))
-              in cthm end
-          end
+          let
+            val serial = #serial (Proofterm.thm_header_id header)
+            fun check_pthm () =
+              if Symtab.defined trusted theory_name then ("", Checker.axiomatize pthm)
+              else check_proof (Thm_Name.print_pos thm_name) (Checker.pthm cthy pthm)
+          in lookup check_pthm serial end
 
         val prf = Checker.proof checked_pthm_axm thm
-        val cthms = (checked0 @ (Inttab.dest (!seen) |> map snd)) |> map snd
         val cthm =
-          case Checker.check cthy cthms thm prf of
-            SOME cthm => cthm 
-          | NONE => error ("Incorrect proof term for " ^ name)
+          check
+            (Checker.check cthy (Inttab.dest (!proof_seen) |> map snd) thm prf) 
+            ("Incorrect proof term for " ^ name)
       in (name, cthm) end
 
     fun check_thm thm_name thm =
@@ -47,9 +54,9 @@ fun check_thmss trusted (checked0, seen0) thmss cthy =
     fun check_thms (name, thms) = map_index (fn (i, thm) => check_thm (name, i) thm) thms
     val checked = maps check_thms thmss
 
-  in (checked, !seen) end
+  in (checked0 @ checked, !seen) end
 
-fun check_thy thy = case Checker.cthy thy of NONE => error "Invalid theory" | SOME cthy => cthy
+fun check_thy thy = check (Checker.cthy thy) "Invalid theory signature"
 
 fun check_current thy =
   let
