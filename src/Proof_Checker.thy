@@ -46,7 +46,7 @@ fun check_thmss trusted (checked0, seen0) thmss cthy =
     fun check_thm thm_name thm =
       let
         val (name, cthm) = check_proof (Thm_Name.print thm_name) (Checker.thm cthy thm)
-        val _ = writeln ("Checked " ^ name)
+        val _ = Output.information ("Checked " ^ name)
       in (name, cthm) end
 
     fun check_thms (name, thms) = map_index (fn (i, thm) => check_thm (name, i) thm) thms
@@ -74,7 +74,7 @@ val _ =
           val msg =
             "Checked " ^ (checked |> length |> string_of_int) ^ " thms with " ^ 
               (seen |> Inttab.size |> string_of_int) ^ " intermediate thms"
-        in writeln msg end)))
+        in Output.information msg end)))
 
 fun check_build trusted_theories =
   let

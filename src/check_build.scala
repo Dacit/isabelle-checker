@@ -81,31 +81,28 @@ object Check_Build {
       def session_setup(setup_session_name: String, session: Session): Unit = {
         if (setup_session_name == Sessions.DRAFT) {
           session.all_messages += Session.Consumer[Prover.Message]("check_build") {
-            case output: Prover.Output
-              if Protocol.is_exported(output.message) || Protocol.is_state(output.message) =>
-              output.properties match {
-                case Position.Line_File(line, file) =>
-                  val pos = Position.Line_File(line, file)
-                  if (Build.print_log_check(pos, output.message, Nil, Nil)) {
-                    progress.echo(Protocol.message_text(output.message, pos = pos), verbose = true)
-                  }
-                case _ =>
-              }
+            case output: Prover.Output if Protocol.is_information(output.message) =>
+              progress.echo(Protocol.message_text(output.message), verbose = true)
             case _ =>
           }
         }
       }
 
+      val selection = Sessions.Selection.session(Sessions.DRAFT)
       val res =
         Build.build(options, private_dir = Some(private_dir), dirs = home_dir.absolute :: dirs,
-          infos = List(session_info), augment_options = augment_options, selection =
-          Sessions.Selection.session(Sessions.DRAFT), session_setup = session_setup, cache = cache)
+          infos = List(session_info), augment_options = augment_options, selection = selection,
+          session_setup = session_setup, cache = cache)
+
+      for (session <- res.unfinished) {
+        using(res.store.open_database(session, output = true))(db =>
+          res.store.read_errors(db, session).foreach(progress.echo_error_message(_)))
+      }
 
       val thy_results = check_theories.map(node => theory_results.value.get(node.theory))
       val result = Result(thy_results.flatten.flatten, res.ok && thy_results.forall(_.isDefined))
 
       if (result.ok) progress.echo("Checked " + result.thms.length + " proofs in " + session)
-      else progress.echo_error_message("Unsuccessful check in " + session)
 
       result
     }
