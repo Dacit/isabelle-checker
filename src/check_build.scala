@@ -128,9 +128,9 @@ object Check_Build {
     cache: Rich_Text.Cache = Rich_Text.Cache.make()
   ): Results = {
     val all_dirs = select_dirs ::: dirs ::: AFP.main_dirs(afp_root)
-    val sessions_structure = Sessions.load_structure(options, dirs = all_dirs)
+    val full_sessions_structure = Sessions.load_structure(options, dirs = all_dirs)
 
-    val all_trusted_sessions = sessions_structure.build_requirements(trusted_sessions)
+    val all_trusted_sessions = full_sessions_structure.build_requirements(trusted_sessions)
     val is_trusted = all_trusted_sessions.toSet
 
     def augment_options(session: String): Options.Update =
@@ -144,25 +144,26 @@ object Check_Build {
         numa_shuffling, max_jobs = max_jobs, fresh_build = fresh_build, export_files = export_files,
         augment_options = augment_options, cache = cache)
 
+    def all_theories_of(session_name: String): List[Document.Node.Name] = {
+      val base = build_result.deps(session_name)
+      for (theory_name <- base.loaded_theories.topological_order)
+      yield base.known_theories(theory_name).name
+    }
+
     val session_results =
       if (build_result.ok) {
-        val trusted_theories =
-          (for {
-            session <- all_trusted_sessions
-            (_, thy) <- build_result.deps(session).known_theories
-          } yield thy.name).toSet
+        val trusted_theories = all_trusted_sessions.flatMap(all_theories_of)
 
         for {
-          session <- sessions_structure.build_topological_order
+          session <- build_result.deps.sessions_structure.build_graph.maximals
           if build_result.sessions(session)
           if !is_trusted(session)
         } yield session -> {
-          val all_theories =
-            for ((_, thy) <- build_result.deps(session).known_theories.toList) yield thy.name
+          val all_theories = all_theories_of(session)
           val (trusted, theories) = all_theories.partition(trusted_theories.contains)
 
           val infos =
-            for (session <- sessions_structure.imports_requirements(List(session)))
+            for (session <- full_sessions_structure.imports_requirements(List(session)))
             yield build_result.info(session)
 
           val res =
