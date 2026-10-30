@@ -5,4 +5,5 @@ requirements = \
 sources = \
   src/check_build.scala
 services = \
+  isabelle.Check_Build_Functions \
   isabelle.Check_Build_Tools

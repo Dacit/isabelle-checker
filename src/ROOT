@@ -1,3 +1,0 @@
-session Proof_Checker = Pure +
-  theories
-    Proof_Checker

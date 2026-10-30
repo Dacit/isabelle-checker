@@ -10,10 +10,13 @@ import scala.collection.mutable
 
 
 object Check_Build {
-  object Markup_Check_Session_Finished extends isabelle.Markup.Function("check_session_finished")
+  def home_dir: Path = Path.explode("$ISABELLE_CHECKER_HOME")
 
-  final case class Result(thms: List[String] = Nil, finished: Boolean = false) {
-    def rc: Int = if (finished) 0 else 1
+
+  /* results */
+
+  final case class Result(thms: List[String], ok: Boolean) {
+    def rc: Int = if (ok) 0 else 1
   }
 
   object Results {
@@ -22,78 +25,87 @@ object Check_Build {
   }
 
   final class Results private(val build: Build.Results, val sessions: Map[String, Result]) {
-    def sessions_ok: Boolean = sessions.values.forall(_.finished)
+    def sessions_ok: Boolean = sessions.values.forall(_.ok)
     def rc: Int = if (!build.ok) build.rc else if (sessions_ok) 0 else 1
   }
 
-  def home_dir: Path = Path.explode("$ISABELLE_CHECKER_HOME")
 
-  def check_session(options: Options,
+  /* scala function */
+
+  private val theory_results = Synchronized(Map.empty[String, List[String]])
+
+  object Check_Result extends Scala.Fun_Strings("check_result") {
+    val here = Scala_Project.here
+    def apply(args: List[String]): List[String] = {
+      val (theory_name, checked_thms) =
+        args match {
+          case theory_name :: checked_thms => (theory_name, checked_thms)
+          case Nil => error("Malformed arguments")
+        }
+      theory_results.change(_ + (theory_name -> checked_thms))
+      Nil
+    }
+  }
+
+
+  /* check */
+
+  def check_session(
+    options: Options,
     background: Sessions.Background,
-    theories: List[Document.Node.Name],
-    trusted: List[Document.Node.Name] = Nil,
+    check_theories: List[Document.Node.Name],
+    trusted_theories: List[Document.Node.Name] = Nil,
+    dirs: List[Path] = Nil,
+    augment_options: String => Options.Update = _ => Nil,
     cache: Rich_Text.Cache = Rich_Text.Cache.make(),
     progress: Progress = new Progress
-  ): Result = {
-    val store = Store(options, cache = cache)
+  ): Result =
+    Isabelle_System.with_tmp_dir("private") { private_dir =>
+      progress.echo("Checking " + background.session_name + " ...")
 
-    val args = {
-      import XML.Encode._
-      pair(string, pair(list(string), list(string)))(
-        (background.session_name, (theories.map(_.theory), trusted.map(_.theory))))
-    }
+      theory_results.change(_ => Map.empty)
 
-    val env =
-      Isabelle_System.Settings.env(List("ISABELLE_CHECKER_ARGS" -> YXML.string_of_body(args)))
+      val options1 =
+        options + Options.Spec.eq("trusted_theories", trusted_theories.map(_.theory).mkString(","))
 
-    val session =
-      new Session {
-        def session_options: Options = options
-        val interactive = false
-        val resources = new Resources(background, background, Logger.none)
-      }
+      val session_entry =
+        Sessions.Session_Entry(
+          parent = Some(background.session_name),
+          imports = List("Proof_Checker"),
+          theories = List((Nil, List((("Check_Build", Position.none), false)))))
 
-    val result = Synchronized(Result())
-    session.all_messages += Session.Consumer[Prover.Message]("check_build_output") {
-      case msg: Prover.Output =>
-        val message = msg.message
-        if (msg.is_stdout) progress.echo(Symbol.encode(XML.content(message)))
-        if (msg.is_stderr) progress.echo_error_message(Symbol.encode(XML.content(message)))
-      case _ =>
-    }
+      val session_info =
+        Sessions.Info.make(session_entry, draft_session = true, dir = home_dir, options = options1)
 
-    def shutdown(msg: Prover.Protocol_Output): Boolean = {
-      val thms =
-        Exn.capture {
-          import XML.Decode._
-          list(string)(Symbol.decode_yxml(msg.text))
-        }
-      result.change { res =>
-        val res1 =
-          thms match {
-            case Exn.Res(thms) => res.copy(thms = thms, finished = true)
-            case Exn.Exn(_) => res
+      def session_setup(setup_session_name: String, session: Session): Unit = {
+        if (setup_session_name == Sessions.DRAFT) {
+          session.all_messages += Session.Consumer[Prover.Message]("check_build") {
+            case output: Prover.Output
+              if Protocol.is_exported(output.message) || Protocol.is_state(output.message) =>
+              output.properties match {
+                case Position.Line_File(line, file) =>
+                  val pos = Position.Line_File(line, file)
+                  if (Build.print_log_check(pos, output.message, Nil, Nil)) {
+                    progress.echo(Protocol.message_text(output.message, pos = pos), verbose = true)
+                  }
+                case _ =>
+              }
+            case _ =>
           }
-        session.protocol_command("Prover.stop", XML.Encode.int(res1.rc))
-        res1
+        }
       }
-      true
+
+      val res =
+        Build.build(options, private_dir = Some(private_dir), dirs = home_dir.absolute :: dirs,
+          progress = progress, infos = List(session_info), augment_options = augment_options,
+          selection = Sessions.Selection.session(Sessions.DRAFT), session_setup = session_setup,
+          cache = cache)
+
+      val thy_results = check_theories.map(node => theory_results.value.get(node.theory))
+      val result = Result(thy_results.flatten.flatten, res.ok && thy_results.forall(_.isDefined))
+      progress.echo("Checked " + result.thms.length + " proofs in " + background.session_name)
+      result
     }
-
-    session.init_protocol_handler(new Session.Protocol_Handler {
-      override val functions: Session.Protocol_Functions =
-        List(
-          Markup.Build_Session_Finished.name -> shutdown,
-          Markup_Check_Session_Finished.name -> shutdown)
-    })
-
-    val process =
-      Isabelle_Process.start(options, session, background, store.session_heaps(background),
-        cwd = home_dir, env = env)
-    Isabelle_Thread.interrupt_handle(process.terminate()) { process.await_shutdown() }
-
-    result.value
-  }
 
   def check_build(
     options: Options,
@@ -106,55 +118,59 @@ object Check_Build {
     afp_root: Option[Path] = None,
     dirs: List[Path] = Nil,
     select_dirs: List[Path] = Nil,
-    infos: List[Sessions.Info] = Nil,
     numa_shuffling: Boolean = false,
     max_jobs: Option[Int] = None,
     fresh_build: Boolean = false,
     export_files: Boolean = false,
-    session_setup: (String, Session) => Unit = (_, _) => (),
     cache: Rich_Text.Cache = Rich_Text.Cache.make()
   ): Results = {
-    val sessions_structure =
-      Sessions.load_structure(options, dirs = dirs, select_dirs = select_dirs, infos = infos)
+    val all_dirs = select_dirs ::: dirs ::: AFP.main_dirs(afp_root)
+    val sessions_structure = Sessions.load_structure(options, dirs = all_dirs)
 
-    val is_trusted =
-      sessions_structure.build_selection(Sessions.Selection(sessions = trusted_sessions)).toSet
+    val all_trusted_sessions = sessions_structure.build_requirements(trusted_sessions)
+    val is_trusted = all_trusted_sessions.toSet
 
     def augment_options(session: String): Options.Update =
-      if (is_trusted(session)) Nil
-      else List(Options.Spec.eq("record_proofs", "3"), Options.Spec.make("record_theories"))
+      Options.Spec.eq("record_proofs", "2") ::
+        (if (is_trusted(session)) Nil else List(Options.Spec.make("record_theories")))
 
     val build_result =
       Build.build(options, selection = selection, browser_info = browser_info, progress = progress,
         check_unknown_files = check_unknown_files, build_heap = true, clean_build = clean_build,
-        afp_root = afp_root, dirs = dirs, select_dirs = select_dirs, infos = infos, numa_shuffling =
+        afp_root = afp_root, dirs = dirs, select_dirs = select_dirs, numa_shuffling =
         numa_shuffling, max_jobs = max_jobs, fresh_build = fresh_build, export_files = export_files,
-        augment_options = augment_options, session_setup = session_setup, cache = cache)
+        augment_options = augment_options, cache = cache)
 
     val session_results =
       if (build_result.ok) {
-        val trusted =
+        var trusted_theories =
           (for {
-            session <-
-              sessions_structure.imports_selection(Sessions.Selection(sessions = trusted_sessions))
+            session <- all_trusted_sessions
             (_, thy) <- build_result.deps(session).known_theories
           } yield thy.name).toSet
 
         for {
-          session <- sessions_structure.build_selection(selection)
+          session <- sessions_structure.build_topological_order
+          if build_result.sessions(session)
           if !is_trusted(session)
         } yield session -> {
-          val base = build_result.deps(session)
+          val all_theories =
+            for ((_, thy) <- build_result.deps(session).known_theories.toList) yield thy.name
+          val (trusted, theories) = all_theories.partition(trusted_theories.contains)
 
-          val theories =
-            for {
-              (_, thy) <- base.known_theories.toList
-              node_name = thy.name
-              if !trusted(node_name)
-            } yield node_name
+          val infos =
+            for (session <- sessions_structure.imports_requirements(List(session)))
+            yield build_result.info(session)
 
-          check_session(options, build_result.deps.background(session), theories, trusted =
-            trusted.toList, cache = cache, progress = progress)
+          val res =
+            check_session(options, build_result.deps.background(session), theories,
+              trusted_theories = trusted, augment_options = augment_options, dirs = all_dirs,
+              cache = cache, progress = progress)
+
+          // Trust checked theories in future sessions
+          if (res.ok) trusted_theories ++= theories
+
+          res
         }
       }
       else Nil
@@ -278,14 +294,11 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
         val elapsed_time = stop_date - progress.start
 
         progress.echo("\nFinished at " + Build_Log.print_date(stop_date), verbose = true)
-
-        val total_timing =
-          results.sessions.keys.map(a => results.build(a).timing).foldLeft(Timing.zero)(_ + _).
-            copy(elapsed = elapsed_time)
-        progress.echo(total_timing.message_resources)
+        progress.echo(results.sessions.size.toString + " sessions checked")
 
         sys.exit(results.rc)
       })
 }
 
+class Check_Build_Functions extends Scala.Functions(Check_Build.Check_Result)
 class Check_Build_Tools extends Isabelle_Scala_Tools(Check_Build.isabelle_tool)

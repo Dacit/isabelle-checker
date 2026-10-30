@@ -4,8 +4,6 @@ theory Proof_Checker
   keywords "check_theory" :: diag
 begin
 
-ML \<open>open Context\<close>
-
 ML_file \<open>checker_export.ML\<close>
 ML_file \<open>checker.ML\<close>
 
@@ -78,12 +76,13 @@ val _ =
               (seen |> Inttab.size |> string_of_int) ^ " intermediate thms"
         in writeln msg end)))
 
-fun check_theory trusted_theories theory_name =
+fun check_build trusted_theories =
   let
     val trusted = Symtab.make (map (rpair ()) trusted_theories)
-    fun check_segment (st, ((prev_thys, prev_cthy), results0)) =
-      let 
-        val thy = Toplevel.theory_of st
+
+    fun check_segment state ((prev_thys, prev_cthy), results0) =
+      let
+        val thy = Toplevel.theory_of state
         val thmss =
           Facts.dest_static true (map Global_Theory.facts_of prev_thys) (Global_Theory.facts_of thy)
       in 
@@ -95,43 +94,26 @@ fun check_theory trusted_theories theory_name =
           in (([thy], SOME cthy), check_thmss trusted results0 thmss cthy) end
       end
 
-    val empty = ([], Inttab.empty)
-    fun check_states states =
-      if null states then empty
-      else
-        let
-          val thy = Toplevel.theory_of (hd states)
-          val parents = Theory.parents_of thy
-        in snd (List.foldl check_segment ((parents, Checker.cthy thy), empty) states) end
+    fun check_theory theory_name theories_seen =
+      let
+        val thy = Build.get_theory theory_name
+        val parents = Theory.parents_of thy
+        val parents_seen =
+          parents 
+          |> map_filter ((Symtab.lookup theories_seen) o Context.theory_long_name)
+          |> Inttab.joins (K fst)
+        val states =
+          Build.get_theory_segments theory_name |> map #state |> filter Toplevel.is_theory
+        val (_, (checked, seen)) =
+          fold check_segment states ((parents, Checker.cthy thy), ([], parents_seen))
+        val _ = \<^scala>\<open>check_result\<close> (theory_name :: map fst checked)
+      in Symtab.update (theory_name, seen) theories_seen end
 
-    val states = map #state (Build.get_theory_segments theory_name)
-  in check_states (filter Toplevel.is_theory states) end
-
-fun check_theories trusted_theories theory_names =
-  let val (checkeds, seens) = split_list (map (check_theory trusted_theories) theory_names)
-  in (flat checkeds, Inttab.joins (K fst) seens) end
-
-fun check_build args =
-  if args = "" then ()
-  else
-    let
-      fun decode_args args =
-        let
-          open XML.Decode
-          val (theories, trusted) = pair (list string) (list string) (YXML.parse_body args)
-        in (theories, trusted) end
-
-      fun encode_result res =
-        let open XML.Encode
-        in list string res end
-
-      val (theory_names, trusted_theories) = decode_args args
-      val (checked, _) = check_theories trusted_theories theory_names
-      val res = map fst checked
-    in Output.protocol_message [Markup.function "check_session_finished"] [encode_result res] end
-
-val _ =
-  check_build (getenv "ISABELLE_CHECKER_ARGS")
+    val _ = 
+      Build.all_theories ()
+      |> filter_out (Symtab.defined trusted)
+      |> fold check_theory |> Symtab.build
+  in () end
 \<close>
 
 end

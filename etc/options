@@ -1,0 +1,4 @@
+section "Proof Checker"
+
+option trusted_theories : string = ""
+  -- "comma-separated list of long names of trusted theories"
