@@ -61,7 +61,8 @@ object Check_Build {
     progress: Progress = new Progress
   ): Result =
     Isabelle_System.with_tmp_dir("private") { private_dir =>
-      progress.echo("Checking " + background.session_name + " ...")
+      val session = background.session_name
+      progress.echo("Checking " + session + " ...")
 
       theory_results.change(_ => Map.empty)
 
@@ -70,7 +71,7 @@ object Check_Build {
 
       val session_entry =
         Sessions.Session_Entry(
-          parent = Some(background.session_name),
+          parent = Some(session),
           imports = List("Proof_Checker"),
           theories = List((Nil, List((("Check_Build", Position.none), false)))))
 
@@ -97,13 +98,15 @@ object Check_Build {
 
       val res =
         Build.build(options, private_dir = Some(private_dir), dirs = home_dir.absolute :: dirs,
-          progress = progress, infos = List(session_info), augment_options = augment_options,
-          selection = Sessions.Selection.session(Sessions.DRAFT), session_setup = session_setup,
-          cache = cache)
+          infos = List(session_info), augment_options = augment_options, selection =
+          Sessions.Selection.session(Sessions.DRAFT), session_setup = session_setup, cache = cache)
 
       val thy_results = check_theories.map(node => theory_results.value.get(node.theory))
       val result = Result(thy_results.flatten.flatten, res.ok && thy_results.forall(_.isDefined))
-      progress.echo("Checked " + result.thms.length + " proofs in " + background.session_name)
+
+      if (result.ok) progress.echo("Checked " + result.thms.length + " proofs in " + session)
+      else progress.echo_error_message("Found incorrect proof term in " + session)
+
       result
     }
 
@@ -294,7 +297,6 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
         val elapsed_time = stop_date - progress.start
 
         progress.echo("\nFinished at " + Build_Log.print_date(stop_date), verbose = true)
-        progress.echo(results.sessions.size.toString + " sessions checked")
 
         sys.exit(results.rc)
       })
