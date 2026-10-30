@@ -116,10 +116,10 @@ fun check_build args =
   else
     let
       fun decode_args args =
-      let
-        open XML.Decode
-        val (theories, trusted) = pair (list string) (list string) (YXML.parse_body args)
-      in (theories, trusted) end
+        let
+          open XML.Decode
+          val (theories, trusted) = pair (list string) (list string) (YXML.parse_body args)
+        in (theories, trusted) end
 
       fun encode_result res =
         let open XML.Encode
