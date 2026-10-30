@@ -105,7 +105,7 @@ object Check_Build {
       val result = Result(thy_results.flatten.flatten, res.ok && thy_results.forall(_.isDefined))
 
       if (result.ok) progress.echo("Checked " + result.thms.length + " proofs in " + session)
-      else progress.echo_error_message("Found incorrect proof term in " + session)
+      else progress.echo_error_message("Unsuccessful check in " + session)
 
       result
     }
