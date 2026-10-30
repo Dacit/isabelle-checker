@@ -146,7 +146,7 @@ object Check_Build {
 
     val session_results =
       if (build_result.ok) {
-        var trusted_theories =
+        val trusted_theories =
           (for {
             session <- all_trusted_sessions
             (_, thy) <- build_result.deps(session).known_theories
@@ -169,9 +169,6 @@ object Check_Build {
             check_session(options, build_result.deps.background(session), theories,
               trusted_theories = trusted, augment_options = augment_options, dirs = all_dirs,
               cache = cache, progress = progress)
-
-          // Trust checked theories in future sessions
-          if (res.ok) trusted_theories ++= theories
 
           res
         }
