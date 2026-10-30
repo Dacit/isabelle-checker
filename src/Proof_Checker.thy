@@ -78,7 +78,7 @@ val _ =
               (seen |> Inttab.size |> string_of_int) ^ " intermediate thms"
         in writeln msg end)))
 
-fun check_theory trusted_theories (theory_name, result0) =
+fun check_theory trusted_theories theory_name =
   let
     val trusted = Symtab.make (map (rpair ()) trusted_theories)
     fun check_segment (st, ((prev_thys, prev_cthy), results0)) =
@@ -95,19 +95,21 @@ fun check_theory trusted_theories (theory_name, result0) =
           in (([thy], SOME cthy), check_thmss trusted results0 thmss cthy) end
       end
 
+    val empty = ([], Inttab.empty)
     fun check_states states =
-      if null states then (([], NONE), result0)
+      if null states then empty
       else
         let
           val thy = Toplevel.theory_of (hd states)
           val parents = Theory.parents_of thy
-        in List.foldl check_segment ((parents, Checker.cthy thy), result0) states end
+        in snd (List.foldl check_segment ((parents, Checker.cthy thy), empty) states) end
 
-    val states = Build.get_theory_segments theory_name |> map #state |> filter Toplevel.is_theory
-  in snd (check_states states) end
+    val states = map #state (Build.get_theory_segments theory_name)
+  in check_states (filter Toplevel.is_theory states) end
 
 fun check_theories trusted_theories theory_names =
-  List.foldl (check_theory trusted_theories) ([], Inttab.empty) theory_names
+  let val (checkeds, seens) = split_list (map (check_theory trusted_theories) theory_names)
+  in (flat checkeds, Inttab.joins (K fst) seens) end
 
 fun check_build args =
   if args = "" then ()
