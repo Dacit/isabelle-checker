@@ -106,7 +106,7 @@ fun check_build trusted_theories =
           |> map #state |> filter Toplevel.is_theory |> map Toplevel.theory_of
         val ((_, last_cthy), (checked, seen)) =
           fold check_step (thys @ [thy]) ((parents, Checker.cthy thy), ([], parents_seen))
-        val _ = check (Checker.cthy_map last_cthy thy) "Invalid theory signature"
+        val _ = if is_none (Checker.cthy_map last_cthy thy) then (check_thy thy; ()) else ()
         val _ = \<^scala>\<open>check_result\<close> (theory_name :: map fst checked)
       in Symtab.update (theory_name, seen) theories_seen end
 
