@@ -2,4 +2,4 @@ session Proof_Checker_Example = HOL +
   sessions
     Proof_Checker
   theories
-    Example
+    Example Bad
