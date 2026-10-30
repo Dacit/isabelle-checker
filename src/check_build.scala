@@ -130,6 +130,7 @@ object Check_Build {
     val all_dirs = select_dirs ::: dirs ::: AFP.main_dirs(afp_root)
     val full_sessions_structure = Sessions.load_structure(options, dirs = all_dirs)
 
+    full_sessions_structure.check_sessions(trusted_sessions)
     val all_trusted_sessions = full_sessions_structure.build_requirements(trusted_sessions)
     val is_trusted = all_trusted_sessions.toSet
 
