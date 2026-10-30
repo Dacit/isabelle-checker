@@ -563,7 +563,7 @@ lemma replay_indexed_code[code]:
 text \<open>Optimized Export\<close>
 
 export_code exereplay exe_wf_theory
-  Bv PBound Tv Free ExeTheory ExeSignature
+  Bv PBound Tv Free ExeTheory ExeSignature hyps 
   int nat sort exenormalize_sort eq_term eq_Ts
   in SML module_name ExportCheck file_prefix checker_export
 

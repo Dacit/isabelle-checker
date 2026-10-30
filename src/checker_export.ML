@@ -42,6 +42,7 @@ structure ExportCheck : sig
         ((string * string) list *
           (string * (string * string set list) list) list)
   datatype exetheory = ExeTheory of exesignature * term list
+  val hyps : proofterm -> term list
   val int : IntInf.int -> int
   val nat : IntInf.int -> nat
   val sort : string list -> string set

@@ -43,6 +43,7 @@ sig
   val wf_theory_replay: theory -> proof -> term option
 
   (* extra *)
+  val hyps_of: proof -> term list
   val eq_term: term * term -> bool
   val eq_Ts: (var * sort) * (var * sort) -> bool
 end
@@ -87,6 +88,8 @@ type theory = sign * term list
 fun wf_theory (sign, axioms) = exe_wf_theory (ExeTheory (ExeSignature sign, axioms))
 fun wf_theory_replay (sign, axioms) proofterm =
   exereplay (ExeTheory (ExeSignature sign, axioms)) proofterm
+
+val hyps_of = hyps
 end
 
 fun typ T =
@@ -131,7 +134,8 @@ fun proofterm f prf =
   in proof prf end
 
 type pthm = Proofterm.thm_header * Proofterm.thm_body
-datatype thm = Thm of {t: C.term, Ts: (C.var * C.sort) list, prf: Proofterm.proof}
+datatype thm =
+  Thm of {t: C.term, Ts: (C.var * C.sort) list, hyps: C.term list, prf: Proofterm.proof}
 
 datatype cthy = Cthy of {thy: theory, theory: C.theory}
 
@@ -203,14 +207,14 @@ fun pthm (Cthy cthy) ({prop, ...}, thm_body) =
       Proofterm.thm_body_proof_open thm_body
       |> Proofterm.reconstruct_proof (#thy cthy) prop
       |> Proofterm.forall_intr_variables prop
-  in Thm {t = t, Ts = Ts, prf = prf} end
+  in Thm {t = t, Ts = Ts, hyps = [], prf = prf} end
 
 fun thm (Cthy cthy) thm =
   let 
     val thm1 = Thm.transfer (#thy cthy) thm
-    val _ = if (null (Thm.hyps_of thm1)) then () else error "Theorem contains unclosed hypothesis"
+    val hyps = map term (Thm.hyps_of thm1)
     val prop = thm1 |> Thm.full_prop_of |> Envir.beta_eta_contract 
-  in Thm {t = term prop, Ts = tvars_of prop, prf = Thm.reconstruct_proof_of thm1} end
+  in Thm {t = term prop, Ts = tvars_of prop, hyps = hyps, prf = Thm.reconstruct_proof_of thm1} end
 
 type proof = C.proof
 datatype cthm = Cthm of {t: C.term, Ts: (C.var * C.sort) list}
@@ -225,10 +229,12 @@ fun axiomatize ({prop, ...}, _) =
   let val (t, Ts) = pthm_term prop
   in Cthm {t = t, Ts = Ts} end
 
-fun check (Cthy {theory = (sign, axs0), ...}) cthms (Thm {t, Ts, ...}) prf =
+fun check (Cthy {theory = (sign, axs0), ...}) cthms (Thm {t, Ts, hyps, ...}) prf =
   let
     val checked = C.wf_theory_replay (sign, axs0 @ (map (fn Cthm {t, ...} => t) cthms)) prf
-    fun cthm t1 = if C.eq_term (t, t1) then SOME (Cthm {t = t, Ts = Ts}) else NONE
+    fun cthm t1 =
+      if C.eq_term (t, t1) andalso eq_set C.eq_term (C.hyps_of prf, hyps)
+      then SOME (Cthm {t = t, Ts = Ts}) else NONE
   in checked |> Option.mapPartial cthm end
 
 end
