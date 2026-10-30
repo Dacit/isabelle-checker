@@ -208,6 +208,7 @@ fun pthm (Cthy cthy) ({prop, ...}, thm_body) =
 fun thm (Cthy cthy) thm =
   let 
     val thm1 = Thm.transfer (#thy cthy) thm
+    val _ = if (null (Thm.hyps_of thm1)) then () else error "Theorem contains unclosed hypothesis"
     val prop = thm1 |> Thm.full_prop_of |> Envir.beta_eta_contract 
   in Thm {t = term prop, Ts = tvars_of prop, prf = Thm.reconstruct_proof_of thm1} end
 

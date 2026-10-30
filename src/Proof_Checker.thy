@@ -80,9 +80,8 @@ fun check_build trusted_theories =
   let
     val trusted = Symtab.make (map (rpair ()) trusted_theories)
 
-    fun check_segment state ((prev_thys, prev_cthy), results0) =
+    fun check_step thy ((prev_thys, prev_cthy), results0) =
       let
-        val thy = Toplevel.theory_of state
         val thmss =
           Facts.dest_static true (map Global_Theory.facts_of prev_thys) (Global_Theory.facts_of thy)
       in 
@@ -102,10 +101,11 @@ fun check_build trusted_theories =
           parents 
           |> map_filter ((Symtab.lookup theories_seen) o Context.theory_long_name)
           |> Inttab.joins (K fst)
-        val states =
-          Build.get_theory_segments theory_name |> map #state |> filter Toplevel.is_theory
+        val thys =
+          Build.get_theory_segments theory_name
+          |> map #state |> filter Toplevel.is_theory |> map Toplevel.theory_of
         val (_, (checked, seen)) =
-          fold check_segment states ((parents, Checker.cthy thy), ([], parents_seen))
+          fold check_step (thys @ [thy]) ((parents, Checker.cthy thy), ([], parents_seen))
         val _ = \<^scala>\<open>check_result\<close> (theory_name :: map fst checked)
       in Symtab.update (theory_name, seen) theories_seen end
 
