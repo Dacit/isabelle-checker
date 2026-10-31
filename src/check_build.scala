@@ -297,10 +297,7 @@ Usage: isabelle build [OPTIONS] [SESSIONS ...]
             fresh_build = fresh_build,
             export_files = export_files)
 
-        val stop_date = progress.now()
-        val elapsed_time = stop_date - progress.start
-
-        progress.echo("\nFinished at " + Build_Log.print_date(stop_date), verbose = true)
+        progress.echo("\nFinished at " + Build_Log.print_date(progress.now()), verbose = true)
 
         sys.exit(results.rc)
       })
