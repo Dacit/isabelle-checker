@@ -203,9 +203,10 @@ fun pthm_term prop =
 fun pthm (Cthy cthy) ({prop, thm_name, ...}, thm_body) =
   let
     val (t, Ts) = pthm_term prop
+    val (th_name, pos) = thm_name
     val get_prf =
       Timing.command_timing
-        ("Reconstruct proof term for " ^ Thm_Name.print_pos thm_name)
+        ("Reconstruct proof term for " ^ (Thm_Name.print th_name) ^ (op ^ (Position.here_strs pos)))
         (Position.thread_data ())
         (Proofterm.thm_body_proof_open #> Proofterm.reconstruct_proof (#thy cthy) prop)
     val prf = get_prf thm_body |> Proofterm.forall_intr_variables prop
