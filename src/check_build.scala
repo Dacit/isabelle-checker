@@ -88,11 +88,18 @@ object Check_Build {
         }
       }
 
+      val build_progress =
+        new Console_Progress(verbose = true, threshold = Build.progress_threshold(options)) {
+          override def output(msgs: Progress.Output): Unit = ()
+          override def nodes_status(status: Progress.Nodes_Status): Unit =
+            super.output(status.long_running_commands(status_threshold))
+        }
+
       val selection = Sessions.Selection.session(Sessions.DRAFT)
       val res =
         Build.build(options, private_dir = Some(private_dir), dirs = home_dir.absolute :: dirs,
           infos = List(session_info), augment_options = augment_options, selection = selection,
-          session_setup = session_setup, cache = cache)
+          session_setup = session_setup, cache = cache, progress = build_progress)
 
       for (session <- res.unfinished) {
         using(res.store.open_database(session, output = true))(db =>

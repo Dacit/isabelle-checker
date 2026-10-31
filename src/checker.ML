@@ -200,13 +200,15 @@ fun pthm_term prop =
     if eq_set C.eq_Ts (Ts, tvars_of prop1) then (term prop1, Ts) else error "TVars changed"
   end
 
-fun pthm (Cthy cthy) ({prop, ...}, thm_body) =
+fun pthm (Cthy cthy) ({prop, thm_name, ...}, thm_body) =
   let
     val (t, Ts) = pthm_term prop
-    val prf =
-      Proofterm.thm_body_proof_open thm_body
-      |> Proofterm.reconstruct_proof (#thy cthy) prop
-      |> Proofterm.forall_intr_variables prop
+    val get_prf =
+      Timing.command_timing
+        ("Reconstruct proof term for " ^ Thm_Name.print_pos thm_name)
+        (Position.thread_data ())
+        (Proofterm.thm_body_proof_open #> Proofterm.reconstruct_proof (#thy cthy) prop)
+    val prf = get_prf thm_body |> Proofterm.forall_intr_variables prop
   in Thm {t = t, Ts = Ts, hyps = [], prf = prf} end
 
 fun thm (Cthy cthy) thm =
