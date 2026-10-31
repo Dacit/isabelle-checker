@@ -82,7 +82,7 @@ object Check_Build {
         if (setup_session_name == Sessions.DRAFT) {
           session.all_messages += Session.Consumer[Prover.Message]("check_build") {
             case output: Prover.Output if Protocol.is_information(output.message) =>
-              progress.echo(Protocol.message_text(output.message), verbose = true)
+              progress.echo(Protocol.message_text(output.message))
             case _ =>
           }
         }
