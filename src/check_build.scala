@@ -142,10 +142,11 @@ object Check_Build {
       Options.Spec.eq("record_proofs", "2") ::
         (if (is_trusted(session)) Nil else List(Options.Spec.make("record_theories")))
 
+    val build_options = options + Options.Spec.make("build_thorough")
     val build_result =
-      Build.build(options, selection = selection, browser_info = browser_info, progress = progress,
-        check_unknown_files = check_unknown_files, build_heap = true, clean_build = clean_build,
-        afp_root = afp_root, dirs = dirs, select_dirs = select_dirs, numa_shuffling =
+      Build.build(build_options, selection = selection, browser_info = browser_info, progress =
+        progress, check_unknown_files = check_unknown_files, build_heap = true, clean_build =
+        clean_build, afp_root = afp_root, dirs = dirs, select_dirs = select_dirs, numa_shuffling =
         numa_shuffling, max_jobs = max_jobs, fresh_build = fresh_build, export_files = export_files,
         augment_options = augment_options, cache = cache)
 
